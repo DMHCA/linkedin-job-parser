@@ -1,3 +1,30 @@
 spring:
-  application:
-    name: linkedin-job-parser
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+
+parser:
+  geo-ids: ${LINKEDIN_GEO_IDS}
+  java-keywords: ${JAVA_KEYWORDS}
+  big-tech-keywords: ${BIG_TECH_KEYWORDS}
+  f-tpr: ${LINKEDIN_F_TPR}
+  f-wt: ${LINKEDIN_F_WT}
+  big-tech-companies: ${BIG_TECH_COMPANIES}
+  excluded-languages: ${EXCLUDED_LANGUAGES}
+  excluded-title-words: ${EXCLUDED_TITLE_WORDS}
+  interval: ${PARSER_INTERVAL}
+
+openai:
+  api-key: ${OPENAI_API_KEY}
+  model: ${OPENAI_MODEL}
+  enabled: ${OPENAI_ENABLED}
+
+candidate:
+  profile: ${CANDIDATE_PROFILE}

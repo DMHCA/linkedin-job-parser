@@ -1,4 +1,4 @@
-package com.romantrippel.linkedin_job_parser;
+package com.romantrippel.linkedinjobparser;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
