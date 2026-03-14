@@ -47,17 +47,7 @@ public class LinkedInJobParser {
 
     public String fetchDescriptionByJobId(String jobId) {
         try {
-            String publicUrl = buildPublicJobUrl(jobId);
-
-            Document jobDoc = Jsoup.connect(publicUrl)
-                    .userAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
-                    .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9")
-                    .header("Accept-Language", "en-US,en;q=0.9")
-                    .header("Cache-Control", "no-cache")
-                    .header("Connection", "keep-alive")
-                    .header("Upgrade-Insecure-Requests", "1")
-                    .timeout(15000)
-                    .get();
+            Document jobDoc = fetchJobDocument(jobId);
 
             Element descriptionElement = jobDoc.selectFirst(".show-more-less-html__markup");
 
@@ -80,6 +70,59 @@ public class LinkedInJobParser {
         } catch (Exception e) {
             return "";
         }
+    }
+
+    public String fetchLogoUrlByJobId(String jobId) {
+        try {
+            Document jobDoc = fetchJobDocument(jobId);
+
+            Element image = jobDoc.selectFirst(".artdeco-entity-image img");
+
+            if (image == null) {
+                image = jobDoc.selectFirst(".topcard__flavor-row img");
+            }
+
+            if (image == null) {
+                image = jobDoc.selectFirst(".topcard__org-name-link + * img");
+            }
+
+            if (image == null) {
+                image = jobDoc.selectFirst("img");
+            }
+
+            if (image == null) {
+                return "";
+            }
+
+            String logoUrl = image.attr("src");
+
+            if (logoUrl == null || logoUrl.isBlank()) {
+                logoUrl = image.attr("data-delayed-url");
+            }
+
+            if (logoUrl == null || logoUrl.isBlank()) {
+                logoUrl = image.attr("data-ghost-url");
+            }
+
+            return logoUrl == null ? "" : logoUrl.trim();
+
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private Document fetchJobDocument(String jobId) throws Exception {
+        String publicUrl = buildPublicJobUrl(jobId);
+
+        return Jsoup.connect(publicUrl)
+                .userAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9")
+                .header("Accept-Language", "en-US,en;q=0.9")
+                .header("Cache-Control", "no-cache")
+                .header("Connection", "keep-alive")
+                .header("Upgrade-Insecure-Requests", "1")
+                .timeout(15000)
+                .get();
     }
 
     private String extractJobLink(Element jobElement) {

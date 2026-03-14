@@ -15,6 +15,15 @@ public class OpenAiProperties {
     @Value("${openai.enabled}")
     private boolean enabled;
 
+    @Value("${openai.cover-letter-threshold}")
+    private int coverLetterThreshold;
+
+    @Value("${openai.timeout-ms}")
+    private int timeoutMs;
+
+    @Value("${openai.max-tokens}")
+    private int maxTokens;
+
     public String getApiKey() {
         return apiKey;
     }
@@ -25,5 +34,17 @@ public class OpenAiProperties {
 
     public boolean isEnabled() {
         return enabled;
+    }
+
+    public int getCoverLetterThreshold() {
+        return coverLetterThreshold;
+    }
+
+    public int getTimeoutMs() {
+        return timeoutMs;
+    }
+
+    public int getMaxTokens() {
+        return maxTokens;
     }
 }

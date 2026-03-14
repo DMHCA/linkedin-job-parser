@@ -27,6 +27,7 @@ public class JobProcessor {
     private final JobLanguageDetector languageDetector = new JobLanguageDetector();
     private final OpenAiJobFitService openAiJobFitService;
     private final OpenAiProperties openAiProperties;
+    private final TelegramService telegramService;
 
     @Value("${parser.geo-ids}")
     private String geoIdsRaw;
@@ -55,11 +56,13 @@ public class JobProcessor {
     public JobProcessor(LinkedInJobParser parser,
                         JobRepository jobRepository,
                         OpenAiJobFitService openAiJobFitService,
-                        OpenAiProperties openAiProperties) {
+                        OpenAiProperties openAiProperties,
+                        TelegramService telegramService) {
         this.parser = parser;
         this.jobRepository = jobRepository;
         this.openAiJobFitService = openAiJobFitService;
         this.openAiProperties = openAiProperties;
+        this.telegramService = telegramService;
     }
 
     public void process() throws Exception {
@@ -75,9 +78,7 @@ public class JobProcessor {
                 !hasExcludedTitleWord(job, excludedTitleWords)
                         && containsJava(job);
 
-        Predicate<Job> postDescriptionFilter = this::shouldSaveByOpenAiOrDefault;
-
-        processJobs(urls, preDescriptionFilter, postDescriptionFilter);
+        processJobs(urls, preDescriptionFilter, job -> true);
     }
 
     public void processBigTechJobs() throws Exception {
@@ -91,8 +92,7 @@ public class JobProcessor {
                         && isBigTechCompany(job, bigTechCompanies);
 
         Predicate<Job> postDescriptionFilter = job ->
-                (containsJava(job) || doesNotContainExcludedLanguages(job, excludedLanguages))
-                        && shouldSaveByOpenAiOrDefault(job);
+                containsJava(job) || doesNotContainExcludedLanguages(job, excludedLanguages);
 
         processJobs(urls, preDescriptionFilter, postDescriptionFilter);
     }
@@ -128,37 +128,42 @@ public class JobProcessor {
                     continue;
                 }
 
+                evaluateAndAttachOpenAi(job);
                 save(job);
             }
         }
     }
 
-    private boolean shouldSaveByOpenAiOrDefault(Job job) {
-
+    private void evaluateAndAttachOpenAi(Job job) {
         if (!openAiProperties.isEnabled()) {
-            return true;
+            return;
         }
 
-        JobFitResponse response = openAiJobFitService.evaluate(job);
+        try {
+            JobFitResponse response = openAiJobFitService.evaluate(job);
+            job.applyFitResponse(response);
 
-        System.out.println("OPENAI EVALUATION");
-        System.out.println("Title: " + job.getTitle());
-        System.out.println("Company: " + job.getCompany());
-        System.out.println("Location: " + job.getLocation());
-        System.out.println("Link: " + job.getLink());
-        System.out.println("Score: " + response.getFitScore());
-        System.out.println("RoleType: " + response.getRoleType());
-        System.out.println("Seniority: " + response.getSeniorityMatch());
-        System.out.println("TechMatch: " + response.getTechMatch());
-        System.out.println("Verdict: " + response.getVerdict());
-        System.out.println("Reason: " + response.getReason());
-        System.out.println("-----------------------------");
-
-        if (!response.isFit()) {
-            return false;
+            System.out.println("OPENAI EVALUATION");
+            System.out.println("Title: " + job.getTitle());
+            System.out.println("Company: " + job.getCompany());
+            System.out.println("Location: " + job.getLocation());
+            System.out.println("Link: " + job.getLink());
+            System.out.println("Score: " + response.getFitScore());
+            System.out.println("RoleType: " + response.getRoleType());
+            System.out.println("Seniority: " + response.getSeniorityMatch());
+            System.out.println("TechMatch: " + response.getTechMatch());
+            System.out.println("Verdict: " + response.getVerdict());
+            System.out.println("Reason: " + response.getReason());
+            System.out.println("Cover Letter:");
+            System.out.println(response.getCoverLetter());
+            System.out.println("-----------------------------");
+        } catch (Exception e) {
+            System.out.println("OPENAI EVALUATION FAILED");
+            System.out.println("JobId: " + job.getJobId());
+            System.out.println("Title: " + job.getTitle());
+            System.out.println("Reason: " + e.getMessage());
+            System.out.println("-----------------------------");
         }
-
-        return response.getFitScore() >= 60;
     }
 
     private boolean hasValidJobId(Job job) {
@@ -253,6 +258,7 @@ public class JobProcessor {
 
     private void save(Job job) {
         Job savedJob = jobRepository.save(job);
+        telegramService.sendJob(savedJob);
 
         System.out.println("NEW JOB SAVED");
         System.out.println("Id: " + savedJob.getId());
@@ -262,6 +268,14 @@ public class JobProcessor {
         System.out.println("Location: " + savedJob.getLocation());
         System.out.println("Link: " + savedJob.getLink());
         System.out.println("Description: " + savedJob.getDescription());
+        System.out.println("Fit: " + savedJob.getFit());
+        System.out.println("FitScore: " + savedJob.getFitScore());
+        System.out.println("RoleType: " + savedJob.getRoleType());
+        System.out.println("SeniorityMatch: " + savedJob.getSeniorityMatch());
+        System.out.println("TechMatch: " + savedJob.getTechMatch());
+        System.out.println("Verdict: " + savedJob.getVerdict());
+        System.out.println("Reason: " + savedJob.getReason());
+        System.out.println("CoverLetter: " + savedJob.getCoverLetter());
         System.out.println();
     }
 

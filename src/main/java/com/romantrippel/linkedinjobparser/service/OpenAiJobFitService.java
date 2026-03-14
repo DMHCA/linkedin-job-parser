@@ -7,6 +7,7 @@ import com.romantrippel.linkedinjobparser.config.OpenAiProperties;
 import com.romantrippel.linkedinjobparser.dto.JobFitResponse;
 import com.romantrippel.linkedinjobparser.entity.Job;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
@@ -26,16 +27,26 @@ public class OpenAiJobFitService {
                                CandidateProperties candidateProperties) {
         this.openAiProperties = openAiProperties;
         this.candidateProperties = candidateProperties;
-        this.restClient = RestClient.builder().build();
+
+        SimpleClientHttpRequestFactory requestFactory =
+                new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(openAiProperties.getTimeoutMs());
+        requestFactory.setReadTimeout(openAiProperties.getTimeoutMs());
+
+        this.restClient = RestClient.builder()
+                .requestFactory(requestFactory)
+                .build();
     }
 
     public JobFitResponse evaluate(Job job) {
         try {
-            String prompt = buildPrompt(job);
+            String prompt = buildEvaluationPrompt(job);
 
             Map<String, Object> requestBody = Map.of(
                     "model", openAiProperties.getModel(),
-                    "input", prompt
+                    "input", prompt,
+                    "max_output_tokens", openAiProperties.getMaxTokens(),
+                    "reasoning", Map.of("effort", "minimal")
             );
 
             String responseBody = restClient.post()
@@ -48,19 +59,34 @@ public class OpenAiJobFitService {
 
             String jsonText = extractOutputText(responseBody);
 
-            return objectMapper.readValue(jsonText, JobFitResponse.class);
+            JobFitResponse result = objectMapper.readValue(jsonText, JobFitResponse.class);
+
+            if (result.getFitScore() >= openAiProperties.getCoverLetterThreshold()) {
+                String coverLetter = generateCoverLetter(job);
+                result.setCoverLetter(coverLetter);
+            }
+
+            return result;
+
         } catch (Exception e) {
-            throw new RuntimeException("OpenAI evaluation failed", e);
+            throw new RuntimeException(
+                    "OpenAI evaluation failed for jobId=" + job.getJobId()
+                            + ", title=" + job.getTitle()
+                            + ", reason=" + e.getMessage(),
+                    e
+            );
         }
     }
 
-    private String buildPrompt(Job job) {
+    private String buildEvaluationPrompt(Job job) {
         return """
                 You evaluate job offers for a software engineer.
 
                 Use the candidate profile and the job description.
 
-                Return JSON only.
+                Return valid JSON only.
+                Do not add markdown.
+                Do not add code fences.
 
                 Candidate profile:
                 """ + candidateProperties.getProfile() + """
@@ -81,13 +107,59 @@ public class OpenAiJobFitService {
                 {
                   "fit": true,
                   "fitScore": 0,
-                  "roleType": "backend | fullstack | frontend | qa | devops | support | other",
-                  "seniorityMatch": "good | slightly_senior | too_senior",
-                  "techMatch": "good | partial | poor",
+                  "roleType": "backend",
+                  "seniorityMatch": "good",
+                  "techMatch": "good",
                   "reason": "short explanation",
-                  "verdict": "recommended | borderline | not_recommended"
+                  "verdict": "recommended",
+                  "coverLetter": ""
                 }
                 """;
+    }
+
+    private String generateCoverLetter(Job job) {
+        try {
+            String prompt = """
+                    Write a very short professional cover letter in 3-4 sentences.
+
+                    Return plain text only.
+                    Do not add markdown.
+
+                    Candidate profile:
+                    """ + candidateProperties.getProfile() + """
+
+                    Job title:
+                    """ + safe(job.getTitle()) + """
+
+                    Company:
+                    """ + safe(job.getCompany()) + """
+
+                    Job description:
+                    """ + safe(job.getDescription()) + """
+                    """;
+
+            Map<String, Object> requestBody = Map.of(
+                    "model", openAiProperties.getModel(),
+                    "input", prompt,
+                    "max_output_tokens", openAiProperties.getMaxTokens(),
+                    "reasoning", Map.of("effort", "minimal")
+            );
+
+            String responseBody = restClient.post()
+                    .uri(OPENAI_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .header("Authorization", "Bearer " + openAiProperties.getApiKey())
+                    .body(requestBody)
+                    .retrieve()
+                    .body(String.class);
+
+            return extractOutputText(responseBody);
+
+        } catch (Exception e) {
+            System.out.println("Cover letter generation failed for jobId=" + job.getJobId()
+                    + ", reason=" + e.getMessage());
+            return "";
+        }
     }
 
     private String extractOutputText(String responseBody) {
@@ -114,9 +186,10 @@ public class OpenAiJobFitService {
                 }
             }
 
-            throw new RuntimeException("Could not extract model text from response");
+            throw new RuntimeException("Could not extract model text from response: " + responseBody);
+
         } catch (Exception e) {
-            throw new RuntimeException("Failed to parse OpenAI response", e);
+            throw new RuntimeException("Failed to parse OpenAI response. Raw body: " + responseBody, e);
         }
     }
 

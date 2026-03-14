@@ -9,6 +9,15 @@ public class JobFitResponse {
     private String techMatch;
     private String reason;
     private String verdict;
+    private String coverLetter;
+
+    public String getCoverLetter() {
+        return coverLetter;
+    }
+
+    public void setCoverLetter(String coverLetter) {
+        this.coverLetter = coverLetter;
+    }
 
     public JobFitResponse() {
     }
