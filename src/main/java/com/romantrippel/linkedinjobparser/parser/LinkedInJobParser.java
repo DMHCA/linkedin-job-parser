@@ -14,36 +14,44 @@ import java.util.List;
 public class LinkedInJobParser {
 
     public List<Job> parse(String url) throws Exception {
-        List<Job> jobs = new ArrayList<>();
+        try {
+            List<Job> jobs = new ArrayList<>();
 
-        Document doc = Jsoup.connect(url)
-                .userAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
-                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9")
-                .header("Accept-Language", "en-US,en;q=0.9")
-                .header("Cache-Control", "no-cache")
-                .header("Connection", "keep-alive")
-                .header("Upgrade-Insecure-Requests", "1")
-                .timeout(15000)
-                .get();
+            Document doc = Jsoup.connect(url)
+                    .userAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+                    .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9")
+                    .header("Accept-Language", "en-US,en;q=0.9")
+                    .header("Cache-Control", "no-cache")
+                    .header("Connection", "keep-alive")
+                    .header("Upgrade-Insecure-Requests", "1")
+                    .timeout(15000)
+                    .get();
 
-        Elements jobElements = doc.select("ul.jobs-search__results-list li");
+            Elements jobElements = doc.select("ul.jobs-search__results-list li");
 
-        for (Element jobElement : jobElements) {
-            String title = jobElement.select("h3").text();
-            String company = jobElement.select("h4").text();
-            String location = jobElement.select(".job-search-card__location").text();
-            String link = extractJobLink(jobElement);
-            String jobId = extractJobId(link);
+            for (Element jobElement : jobElements) {
+                String title = jobElement.select("h3").text();
+                String company = jobElement.select("h4").text();
+                String location = jobElement.select(".job-search-card__location").text();
+                String link = extractJobLink(jobElement);
+                String jobId = extractJobId(link);
 
-            if (jobId.isBlank()) {
-                continue;
+                if (jobId.isBlank()) {
+                    continue;
+                }
+
+                jobs.add(new Job(jobId, title, company, location, link, ""));
             }
 
-            jobs.add(new Job(jobId, title, company, location, link, ""));
+            return jobs;
+        } catch (org.jsoup.HttpStatusException e) {
+            if (e.getStatusCode() == 429) {
+                throw new RuntimeException("LinkedIn rate limit hit (429) for url: " + url, e);
+            }
+            throw e;
         }
-
-        return jobs;
     }
+
 
     public String fetchDescriptionByJobId(String jobId) {
         try {

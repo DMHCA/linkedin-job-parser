@@ -1,6 +1,5 @@
 package com.romantrippel.linkedinjobparser.service;
 
-import com.romantrippel.linkedinjobparser.config.OpenAiProperties;
 import com.romantrippel.linkedinjobparser.config.TelegramProperties;
 import com.romantrippel.linkedinjobparser.entity.Job;
 import com.romantrippel.linkedinjobparser.parser.LinkedInJobParser;
@@ -14,32 +13,26 @@ import java.util.Map;
 public class TelegramService {
 
     private final TelegramProperties telegramProperties;
-    private final OpenAiProperties openAiProperties;
     private final LinkedInJobParser linkedInJobParser;
     private final RestClient restClient;
 
     public TelegramService(TelegramProperties telegramProperties,
-                           OpenAiProperties openAiProperties,
                            LinkedInJobParser linkedInJobParser) {
         this.telegramProperties = telegramProperties;
-        this.openAiProperties = openAiProperties;
         this.linkedInJobParser = linkedInJobParser;
         this.restClient = RestClient.builder().build();
     }
 
     public void sendJob(Job job) {
-        if (!telegramProperties.isEnabled()) {
-            return;
-        }
+        if (!telegramProperties.isEnabled()) return;
 
         String logoUrl = linkedInJobParser.fetchLogoUrlByJobId(job.getJobId());
 
         if (logoUrl != null && !logoUrl.isBlank()) {
             sendPhoto(job, logoUrl);
-            return;
+        } else {
+            sendMessage(job);
         }
-
-        sendMessage(job);
     }
 
     private void sendPhoto(Job job, String logoUrl) {
@@ -87,64 +80,47 @@ public class TelegramService {
     private String buildMessage(Job job) {
         StringBuilder message = new StringBuilder();
 
-        message.append(buildHeader(job));
-        message.append("🏢 Company: ").append(safe(job.getCompany())).append("\n");
-        message.append("💼 Title: ").append(safe(job.getTitle())).append("\n");
-        message.append("📍 Location: ").append(safe(job.getLocation())).append("\n");
-        message.append("🆔 JobId: ").append(safe(job.getJobId())).append("\n");
+        // Заголовок
+        message.append("🔥🔥🔥 HOT MATCH 🔥🔥🔥\n")
+                .append("━━━━━━━━━━━━━━━━━━━━\n\n");
 
-        if (job.getFit() != null) {
-            message.append("✅ Fit: ").append(job.getFit()).append("\n");
-        }
+        // Основная информация
+        message.append("🏢 ").append(safe(job.getCompany())).append("\n");
+        message.append("💼 ").append(safe(job.getTitle())).append("\n");
+        message.append("📍 ").append(safe(job.getLocation())).append("\n\n");
 
+        // Score + Level
         if (job.getFitScore() != null) {
-            message.append("📊 FitScore: ").append(job.getFitScore()).append("\n");
+            message.append("📊 Score: ").append(job.getFitScore()).append("\n");
+        }
+        if (job.getSeniority() != null && !job.getSeniority().isBlank()) {
+            message.append("📈 Level: ").append(job.getSeniority()).append("\n");
         }
 
-        if (job.getRoleType() != null) {
-            message.append("🧩 RoleType: ").append(job.getRoleType()).append("\n");
+        // Stack
+        if (job.getStack() != null && !job.getStack().isBlank()) {
+            message.append("🛠 Stack: ").append(job.getStack()).append("\n\n");
         }
 
-        if (job.getSeniorityMatch() != null) {
-            message.append("📈 Seniority: ").append(job.getSeniorityMatch()).append("\n");
+        // Responsibilities
+        if (job.getResponsibilities() != null && !job.getResponsibilities().isBlank()) {
+            message.append("🧠 Чем заниматься:\n")
+                    .append(job.getResponsibilities())
+                    .append("\n\n");
         }
 
-        if (job.getTechMatch() != null) {
-            message.append("🛠 TechMatch: ").append(job.getTechMatch()).append("\n");
+        // Match reason
+        if (job.getMatchReason() != null && !job.getMatchReason().isBlank()) {
+            message.append("✅ Почему подходит:\n")
+                    .append(job.getMatchReason())
+                    .append("\n\n");
         }
 
-        if (job.getVerdict() != null) {
-            message.append("🎯 Verdict: ").append(job.getVerdict()).append("\n");
-        }
-
-        if (job.getReason() != null && !job.getReason().isBlank()) {
-            message.append("\n📝 Reason:\n")
-                    .append(job.getReason())
-                    .append("\n");
-        }
-
-        if (job.getCoverLetter() != null && !job.getCoverLetter().isBlank()) {
-            message.append("\n✉️ Cover Letter:\n")
-                    .append(job.getCoverLetter())
-                    .append("\n");
-        }
-
-        message.append("\n🔗 Link:\n")
+        // Link
+        message.append("🔗 LinkedIn\n")
                 .append(safe(job.getLink()));
 
         return message.toString();
-    }
-
-    private String buildHeader(Job job) {
-        Integer score = job.getFitScore();
-
-        if (score != null && score >= openAiProperties.getCoverLetterThreshold()) {
-            return "🔥🔥🔥 HOT MATCH 🔥🔥🔥\n"
-                    + "━━━━━━━━━━━━━━━━━━━━\n\n";
-        }
-
-        return "💼 New opportunity\n"
-                + "━━━━━━━━━━━━━━━━━━━━\n\n";
     }
 
     private String safe(String value) {

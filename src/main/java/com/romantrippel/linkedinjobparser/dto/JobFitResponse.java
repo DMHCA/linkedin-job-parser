@@ -2,32 +2,13 @@ package com.romantrippel.linkedinjobparser.dto;
 
 public class JobFitResponse {
 
-    private boolean fit;
     private int fitScore;
-    private String roleType;
-    private String seniorityMatch;
-    private String techMatch;
-    private String reason;
-    private String verdict;
-    private String coverLetter;
-
-    public String getCoverLetter() {
-        return coverLetter;
-    }
-
-    public void setCoverLetter(String coverLetter) {
-        this.coverLetter = coverLetter;
-    }
+    private String seniority;
+    private String stack;
+    private String responsibilities;
+    private String matchReason;
 
     public JobFitResponse() {
-    }
-
-    public boolean isFit() {
-        return fit;
-    }
-
-    public void setFit(boolean fit) {
-        this.fit = fit;
     }
 
     public int getFitScore() {
@@ -38,43 +19,35 @@ public class JobFitResponse {
         this.fitScore = fitScore;
     }
 
-    public String getRoleType() {
-        return roleType;
+    public String getSeniority() {
+        return seniority;
     }
 
-    public void setRoleType(String roleType) {
-        this.roleType = roleType;
+    public void setSeniority(String seniority) {
+        this.seniority = seniority;
     }
 
-    public String getSeniorityMatch() {
-        return seniorityMatch;
+    public String getStack() {
+        return stack;
     }
 
-    public void setSeniorityMatch(String seniorityMatch) {
-        this.seniorityMatch = seniorityMatch;
+    public void setStack(String stack) {
+        this.stack = stack;
     }
 
-    public String getTechMatch() {
-        return techMatch;
+    public String getResponsibilities() {
+        return responsibilities;
     }
 
-    public void setTechMatch(String techMatch) {
-        this.techMatch = techMatch;
+    public void setResponsibilities(String responsibilities) {
+        this.responsibilities = responsibilities;
     }
 
-    public String getReason() {
-        return reason;
+    public String getMatchReason() {
+        return matchReason;
     }
 
-    public void setReason(String reason) {
-        this.reason = reason;
-    }
-
-    public String getVerdict() {
-        return verdict;
-    }
-
-    public void setVerdict(String verdict) {
-        this.verdict = verdict;
+    public void setMatchReason(String matchReason) {
+        this.matchReason = matchReason;
     }
 }

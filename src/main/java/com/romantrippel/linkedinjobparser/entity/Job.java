@@ -4,19 +4,16 @@ import com.romantrippel.linkedinjobparser.dto.JobFitResponse;
 import jakarta.persistence.*;
 
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 
 @Entity
-@Table(name = "jobs", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_job_job_id", columnNames = "job_id")
-})
+@Table(name = "jobs")
 public class Job {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "job_id", nullable = false, unique = true)
+    @Column(name = "job_id", nullable = false)
     private String jobId;
 
     @Column(nullable = false)
@@ -31,39 +28,29 @@ public class Job {
     @Column(nullable = false, length = 1000)
     private String link;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(columnDefinition = "text")
     private String description;
-
-    @Column
-    private Boolean fit;
 
     @Column(name = "fit_score")
     private Integer fitScore;
 
-    @Column(name = "role_type")
-    private String roleType;
+    private String seniority;
 
-    @Column(name = "seniority_match")
-    private String seniorityMatch;
+    private String stack;
 
-    @Column(name = "tech_match")
-    private String techMatch;
+    @Column(columnDefinition = "text")
+    private String responsibilities;
 
-    @Column(columnDefinition = "TEXT")
-    private String reason;
+    @Column(name = "match_reason", columnDefinition = "text")
+    private String matchReason;
 
-    @Column
-    private String verdict;
-
-    @Column(name = "cover_letter", columnDefinition = "TEXT")
-    private String coverLetter;
-
-    @Column(name = "created_at", nullable = false, updatable = false)
+    @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
     public Job() {
     }
 
+    // Новый конструктор для парсера
     public Job(String jobId, String title, String company, String location, String link, String description) {
         this.jobId = jobId;
         this.title = title;
@@ -76,23 +63,16 @@ public class Job {
     @PrePersist
     public void prePersist() {
         if (createdAt == null) {
-            createdAt = OffsetDateTime.now(ZoneOffset.UTC);
+            createdAt = OffsetDateTime.now();
         }
     }
 
     public void applyFitResponse(JobFitResponse response) {
-        if (response == null) {
-            return;
-        }
-
-        this.fit = response.isFit();
         this.fitScore = response.getFitScore();
-        this.roleType = response.getRoleType();
-        this.seniorityMatch = response.getSeniorityMatch();
-        this.techMatch = response.getTechMatch();
-        this.reason = response.getReason();
-        this.verdict = response.getVerdict();
-        this.coverLetter = response.getCoverLetter();
+        this.seniority = response.getSeniority();
+        this.stack = response.getStack();
+        this.responsibilities = response.getResponsibilities();
+        this.matchReason = response.getMatchReason();
     }
 
     public Long getId() {
@@ -103,123 +83,71 @@ public class Job {
         return jobId;
     }
 
-    public String getTitle() {
-        return title;
-    }
-
-    public String getCompany() {
-        return company;
-    }
-
-    public String getLocation() {
-        return location;
-    }
-
-    public String getLink() {
-        return link;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public Boolean getFit() {
-        return fit;
-    }
-
-    public Integer getFitScore() {
-        return fitScore;
-    }
-
-    public String getRoleType() {
-        return roleType;
-    }
-
-    public String getSeniorityMatch() {
-        return seniorityMatch;
-    }
-
-    public String getTechMatch() {
-        return techMatch;
-    }
-
-    public String getReason() {
-        return reason;
-    }
-
-    public String getVerdict() {
-        return verdict;
-    }
-
-    public String getCoverLetter() {
-        return coverLetter;
-    }
-
-    public OffsetDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
     public void setJobId(String jobId) {
         this.jobId = jobId;
+    }
+
+    public String getTitle() {
+        return title;
     }
 
     public void setTitle(String title) {
         this.title = title;
     }
 
+    public String getCompany() {
+        return company;
+    }
+
     public void setCompany(String company) {
         this.company = company;
+    }
+
+    public String getLocation() {
+        return location;
     }
 
     public void setLocation(String location) {
         this.location = location;
     }
 
+    public String getLink() {
+        return link;
+    }
+
     public void setLink(String link) {
         this.link = link;
+    }
+
+    public String getDescription() {
+        return description;
     }
 
     public void setDescription(String description) {
         this.description = description;
     }
 
-    public void setFit(Boolean fit) {
-        this.fit = fit;
+    public Integer getFitScore() {
+        return fitScore;
     }
 
-    public void setFitScore(Integer fitScore) {
-        this.fitScore = fitScore;
+    public String getSeniority() {
+        return seniority;
     }
 
-    public void setRoleType(String roleType) {
-        this.roleType = roleType;
+    public String getStack() {
+        return stack;
     }
 
-    public void setSeniorityMatch(String seniorityMatch) {
-        this.seniorityMatch = seniorityMatch;
+    public String getResponsibilities() {
+        return responsibilities;
     }
 
-    public void setTechMatch(String techMatch) {
-        this.techMatch = techMatch;
+    public String getMatchReason() {
+        return matchReason;
     }
 
-    public void setReason(String reason) {
-        this.reason = reason;
-    }
-
-    public void setVerdict(String verdict) {
-        this.verdict = verdict;
-    }
-
-    public void setCoverLetter(String coverLetter) {
-        this.coverLetter = coverLetter;
-    }
-
-    public void setCreatedAt(OffsetDateTime createdAt) {
-        this.createdAt = createdAt;
+    public OffsetDateTime getCreatedAt() {
+        return createdAt;
     }
 }

@@ -10,9 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
 
@@ -38,20 +36,11 @@ public class JobProcessor {
     @Value("${parser.big-tech-keywords}")
     private String bigTechKeywordsRaw;
 
-    @Value("${parser.f-tpr}")
-    private String timePostedRaw;
-
-    @Value("${parser.f-wt}")
-    private String workTypeRaw;
-
-    @Value("${parser.big-tech-companies}")
-    private String bigTechCompaniesRaw;
-
-    @Value("${parser.excluded-languages}")
-    private String excludedLanguagesRaw;
-
     @Value("${parser.excluded-title-words}")
     private String excludedTitleWordsRaw;
+
+    @Value("${parser.max-years-experience}")
+    private int maxYearsExperience;
 
     public JobProcessor(LinkedInJobParser parser,
                         JobRepository jobRepository,
@@ -76,98 +65,100 @@ public class JobProcessor {
 
         Predicate<Job> preDescriptionFilter = job ->
                 !hasExcludedTitleWord(job, excludedTitleWords)
-                        && containsJava(job);
+                        && containsJava(job)
+                        && hasAcceptableExperience(job);
 
-        processJobs(urls, preDescriptionFilter, job -> true);
+        processJobs(urls, preDescriptionFilter);
     }
 
     public void processBigTechJobs() throws Exception {
         List<String> urls = buildSearchUrls(splitToList(bigTechKeywordsRaw));
-        List<String> bigTechCompanies = splitToList(bigTechCompaniesRaw);
-        List<String> excludedLanguages = splitToList(excludedLanguagesRaw);
         List<String> excludedTitleWords = splitToList(excludedTitleWordsRaw);
 
         Predicate<Job> preDescriptionFilter = job ->
                 !hasExcludedTitleWord(job, excludedTitleWords)
-                        && isBigTechCompany(job, bigTechCompanies);
+                        && hasAcceptableExperience(job);
 
-        Predicate<Job> postDescriptionFilter = job ->
-                containsJava(job) || doesNotContainExcludedLanguages(job, excludedLanguages);
-
-        processJobs(urls, preDescriptionFilter, postDescriptionFilter);
+        processJobs(urls, preDescriptionFilter);
     }
 
     private void processJobs(List<String> urls,
-                             Predicate<Job> preDescriptionFilter,
-                             Predicate<Job> postDescriptionFilter) throws Exception {
+                             Predicate<Job> preDescriptionFilter) throws Exception {
 
         for (String url : urls) {
-            List<Job> jobs = parser.parse(url);
+            try {
+                List<Job> jobs = parser.parse(url);
+                sleepRandom(3000, 7000);
 
-            for (Job job : jobs) {
-                if (!preDescriptionFilter.test(job)) {
-                    continue;
+                for (Job job : jobs) {
+                    if (!preDescriptionFilter.test(job)) {
+                        continue;
+                    }
+
+                    if (!hasValidJobId(job) || jobRepository.existsByJobId(job.getJobId())) {
+                        continue;
+                    }
+
+                    sleepRandom(2000, 5000);
+                    String description = parser.fetchDescriptionByJobId(job.getJobId());
+                    job.setDescription(description);
+
+                    if (!languageDetector.isEnglishDescription(job.getDescription())) {
+                        continue;
+                    }
+
+                    evaluateAndAttachOpenAi(job);
+                    save(job);
                 }
 
-                if (!hasValidJobId(job)) {
-                    continue;
-                }
-
-                if (jobRepository.existsByJobId(job.getJobId())) {
-                    continue;
-                }
-
-                String description = parser.fetchDescriptionByJobId(job.getJobId());
-                job.setDescription(description);
-
-                if (!languageDetector.isEnglishDescription(job.getDescription())) {
-                    continue;
-                }
-
-                if (!postDescriptionFilter.test(job)) {
-                    continue;
-                }
-
-                evaluateAndAttachOpenAi(job);
-                save(job);
+            } catch (Exception e) {
+                System.out.println("FAILED URL: " + url + " Reason: " + e.getMessage());
             }
         }
     }
 
     private void evaluateAndAttachOpenAi(Job job) {
-        if (!openAiProperties.isEnabled()) {
-            return;
-        }
+        if (!openAiProperties.isEnabled()) return;
 
         try {
             JobFitResponse response = openAiJobFitService.evaluate(job);
             job.applyFitResponse(response);
-
-            System.out.println("OPENAI EVALUATION");
-            System.out.println("Title: " + job.getTitle());
-            System.out.println("Company: " + job.getCompany());
-            System.out.println("Location: " + job.getLocation());
-            System.out.println("Link: " + job.getLink());
-            System.out.println("Score: " + response.getFitScore());
-            System.out.println("RoleType: " + response.getRoleType());
-            System.out.println("Seniority: " + response.getSeniorityMatch());
-            System.out.println("TechMatch: " + response.getTechMatch());
-            System.out.println("Verdict: " + response.getVerdict());
-            System.out.println("Reason: " + response.getReason());
-            System.out.println("Cover Letter:");
-            System.out.println(response.getCoverLetter());
-            System.out.println("-----------------------------");
         } catch (Exception e) {
-            System.out.println("OPENAI EVALUATION FAILED");
-            System.out.println("JobId: " + job.getJobId());
-            System.out.println("Title: " + job.getTitle());
-            System.out.println("Reason: " + e.getMessage());
-            System.out.println("-----------------------------");
+            System.out.println("OpenAI evaluation failed for jobId=" + job.getJobId() + ", reason=" + e.getMessage());
         }
     }
 
     private boolean hasValidJobId(Job job) {
         return job.getJobId() != null && !job.getJobId().isBlank();
+    }
+
+    private boolean hasExcludedTitleWord(Job job, List<String> excludedTitleWords) {
+        String title = safeLower(job.getTitle());
+        for (String word : excludedTitleWords) {
+            if (title.contains(word)) return true;
+        }
+        return false;
+    }
+
+    private boolean containsJava(Job job) {
+        String text = (safe(job.getTitle()) + " " + safe(job.getDescription())).toLowerCase();
+        return JAVA_PATTERN.matcher(text).find();
+    }
+
+    private boolean hasAcceptableExperience(Job job) {
+        // Проверка по опыту в заголовке, если есть "5+ years" — фильтруем
+        String text = safeLower(job.getTitle()) + " " + safeLower(job.getDescription());
+        for (int i = maxYearsExperience + 1; i <= 20; i++) {
+            if (text.contains(i + "+")) return false;
+        }
+        return true;
+    }
+
+    private void save(Job job) {
+        Job savedJob = jobRepository.save(job);
+        telegramService.sendJob(savedJob);
+
+        System.out.println("NEW JOB SAVED: " + savedJob.getTitle() + " @ " + savedJob.getCompany());
     }
 
     private List<String> buildSearchUrls(List<String> keywords) {
@@ -185,15 +176,9 @@ public class JobProcessor {
 
     private String buildUrl(String keyword, String geoId) {
         String encodedKeyword = URLEncoder.encode(keyword, StandardCharsets.UTF_8);
-
         return "https://www.linkedin.com/jobs/search/?keywords="
                 + encodedKeyword
-                + "&geoId="
-                + geoId
-                + "&f_TPR="
-                + timePostedRaw
-                + "&f_WT="
-                + workTypeRaw;
+                + "&geoId=" + geoId;
     }
 
     private List<String> extractGeoIds(String raw) {
@@ -207,80 +192,7 @@ public class JobProcessor {
 
     private String extractGeoId(String value) {
         int colonIndex = value.indexOf(":");
-
-        if (colonIndex == -1) {
-            return value.trim();
-        }
-
-        return value.substring(colonIndex + 1).trim();
-    }
-
-    private boolean hasExcludedTitleWord(Job job, List<String> excludedTitleWords) {
-        String title = safeLower(job.getTitle());
-
-        for (String word : excludedTitleWords) {
-            if (title.contains(word)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private boolean containsJava(Job job) {
-        String text = buildSearchableText(job);
-        return JAVA_PATTERN.matcher(text).find();
-    }
-
-    private boolean isBigTechCompany(Job job, List<String> companies) {
-        String company = safeLower(job.getCompany());
-
-        for (String item : companies) {
-            if (company.contains(item)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private boolean doesNotContainExcludedLanguages(Job job, List<String> excludedLanguages) {
-        String text = buildSearchableText(job);
-
-        for (String language : excludedLanguages) {
-            if (text.contains(language)) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private void save(Job job) {
-        Job savedJob = jobRepository.save(job);
-        telegramService.sendJob(savedJob);
-
-        System.out.println("NEW JOB SAVED");
-        System.out.println("Id: " + savedJob.getId());
-        System.out.println("JobId: " + savedJob.getJobId());
-        System.out.println("Title: " + savedJob.getTitle());
-        System.out.println("Company: " + savedJob.getCompany());
-        System.out.println("Location: " + savedJob.getLocation());
-        System.out.println("Link: " + savedJob.getLink());
-        System.out.println("Description: " + savedJob.getDescription());
-        System.out.println("Fit: " + savedJob.getFit());
-        System.out.println("FitScore: " + savedJob.getFitScore());
-        System.out.println("RoleType: " + savedJob.getRoleType());
-        System.out.println("SeniorityMatch: " + savedJob.getSeniorityMatch());
-        System.out.println("TechMatch: " + savedJob.getTechMatch());
-        System.out.println("Verdict: " + savedJob.getVerdict());
-        System.out.println("Reason: " + savedJob.getReason());
-        System.out.println("CoverLetter: " + savedJob.getCoverLetter());
-        System.out.println();
-    }
-
-    private String buildSearchableText(Job job) {
-        return (safe(job.getTitle()) + " " + safe(job.getDescription())).toLowerCase();
+        return colonIndex == -1 ? value.trim() : value.substring(colonIndex + 1).trim();
     }
 
     private List<String> splitToList(String raw) {
@@ -297,5 +209,14 @@ public class JobProcessor {
 
     private String safeLower(String value) {
         return safe(value).toLowerCase();
+    }
+
+    private void sleepRandom(long minMs, long maxMs) {
+        try {
+            long delay = minMs + (long) (Math.random() * (maxMs - minMs));
+            Thread.sleep(delay);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 }

@@ -25,11 +25,13 @@ public class OpenAiJobFitService {
 
     public OpenAiJobFitService(OpenAiProperties openAiProperties,
                                CandidateProperties candidateProperties) {
+
         this.openAiProperties = openAiProperties;
         this.candidateProperties = candidateProperties;
 
         SimpleClientHttpRequestFactory requestFactory =
                 new SimpleClientHttpRequestFactory();
+
         requestFactory.setConnectTimeout(openAiProperties.getTimeoutMs());
         requestFactory.setReadTimeout(openAiProperties.getTimeoutMs());
 
@@ -39,7 +41,9 @@ public class OpenAiJobFitService {
     }
 
     public JobFitResponse evaluate(Job job) {
+
         try {
+
             String prompt = buildEvaluationPrompt(job);
 
             Map<String, Object> requestBody = Map.of(
@@ -59,16 +63,10 @@ public class OpenAiJobFitService {
 
             String jsonText = extractOutputText(responseBody);
 
-            JobFitResponse result = objectMapper.readValue(jsonText, JobFitResponse.class);
-
-            if (result.getFitScore() >= openAiProperties.getCoverLetterThreshold()) {
-                String coverLetter = generateCoverLetter(job);
-                result.setCoverLetter(coverLetter);
-            }
-
-            return result;
+            return objectMapper.readValue(jsonText, JobFitResponse.class);
 
         } catch (Exception e) {
+
             throw new RuntimeException(
                     "OpenAI evaluation failed for jobId=" + job.getJobId()
                             + ", title=" + job.getTitle()
@@ -79,91 +77,53 @@ public class OpenAiJobFitService {
     }
 
     private String buildEvaluationPrompt(Job job) {
+
         return """
-                You evaluate job offers for a software engineer.
+You evaluate job offers for a software engineer.
 
-                Use the candidate profile and the job description.
+Return valid JSON only.
+Do not add markdown.
+Do not add code fences.
 
-                Return valid JSON only.
-                Do not add markdown.
-                Do not add code fences.
+Candidate profile:
+""" + candidateProperties.getProfile() + """
 
-                Candidate profile:
-                """ + candidateProperties.getProfile() + """
+Job title:
+""" + safe(job.getTitle()) + """
 
-                Job title:
-                """ + safe(job.getTitle()) + """
+Company:
+""" + safe(job.getCompany()) + """
 
-                Company:
-                """ + safe(job.getCompany()) + """
+Location:
+""" + safe(job.getLocation()) + """
 
-                Location:
-                """ + safe(job.getLocation()) + """
+Job description:
+""" + safe(job.getDescription()) + """
 
-                Job description:
-                """ + safe(job.getDescription()) + """
+Return JSON in this exact format:
 
-                Return JSON in this exact format:
-                {
-                  "fit": true,
-                  "fitScore": 0,
-                  "roleType": "backend",
-                  "seniorityMatch": "good",
-                  "techMatch": "good",
-                  "reason": "short explanation",
-                  "verdict": "recommended",
-                  "coverLetter": ""
-                }
-                """;
-    }
+{
+  "fitScore": 72,
+  "seniority": "mid",
+  "stack": "Java, Spring Boot, PostgreSQL",
+  "responsibilities": "Разработка backend микросервисов для платежной платформы",
+  "matchReason": "У кандидата есть опыт Java и Spring Boot, стек совпадает примерно на 70%"
+}
 
-    private String generateCoverLetter(Job job) {
-        try {
-            String prompt = """
-                    Write a very short professional cover letter in 3-4 sentences.
+Rules:
 
-                    Return plain text only.
-                    Do not add markdown.
-
-                    Candidate profile:
-                    """ + candidateProperties.getProfile() + """
-
-                    Job title:
-                    """ + safe(job.getTitle()) + """
-
-                    Company:
-                    """ + safe(job.getCompany()) + """
-
-                    Job description:
-                    """ + safe(job.getDescription()) + """
-                    """;
-
-            Map<String, Object> requestBody = Map.of(
-                    "model", openAiProperties.getModel(),
-                    "input", prompt,
-                    "max_output_tokens", openAiProperties.getMaxTokens(),
-                    "reasoning", Map.of("effort", "minimal")
-            );
-
-            String responseBody = restClient.post()
-                    .uri(OPENAI_URL)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .header("Authorization", "Bearer " + openAiProperties.getApiKey())
-                    .body(requestBody)
-                    .retrieve()
-                    .body(String.class);
-
-            return extractOutputText(responseBody);
-
-        } catch (Exception e) {
-            System.out.println("Cover letter generation failed for jobId=" + job.getJobId()
-                    + ", reason=" + e.getMessage());
-            return "";
-        }
+- fitScore must be integer from 0 to 100
+- seniority must be one of: junior, mid, senior
+- stack must list the main technologies
+- responsibilities must be one short sentence
+- matchReason must explain why the candidate fits
+""";
     }
 
     private String extractOutputText(String responseBody) {
+
         try {
+
             JsonNode root = objectMapper.readTree(responseBody);
 
             JsonNode outputText = root.path("output_text");
@@ -172,12 +132,19 @@ public class OpenAiJobFitService {
             }
 
             JsonNode output = root.path("output");
+
             if (output.isArray()) {
+
                 for (JsonNode item : output) {
+
                     JsonNode content = item.path("content");
+
                     if (content.isArray()) {
+
                         for (JsonNode part : content) {
+
                             JsonNode text = part.path("text");
+
                             if (!text.isMissingNode() && !text.isNull()) {
                                 return text.asText();
                             }
@@ -189,7 +156,11 @@ public class OpenAiJobFitService {
             throw new RuntimeException("Could not extract model text from response: " + responseBody);
 
         } catch (Exception e) {
-            throw new RuntimeException("Failed to parse OpenAI response. Raw body: " + responseBody, e);
+
+            throw new RuntimeException(
+                    "Failed to parse OpenAI response. Raw body: " + responseBody,
+                    e
+            );
         }
     }
 
