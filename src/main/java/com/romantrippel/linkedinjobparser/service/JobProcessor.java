@@ -25,7 +25,6 @@ public class JobProcessor {
     private final JobLanguageDetector languageDetector = new JobLanguageDetector();
     private final OpenAiJobFitService openAiJobFitService;
     private final OpenAiProperties openAiProperties;
-    private final TelegramService telegramService;
 
     @Value("${parser.geo-ids}")
     private String geoIdsRaw;
@@ -36,6 +35,18 @@ public class JobProcessor {
     @Value("${parser.big-tech-keywords}")
     private String bigTechKeywordsRaw;
 
+    @Value("${parser.f-tpr}")
+    private String timePostedRaw;
+
+    @Value("${parser.f-wt}")
+    private String workTypeRaw;
+
+    @Value("${parser.big-tech-companies}")
+    private String bigTechCompaniesRaw;
+
+    @Value("${parser.excluded-languages}")
+    private String excludedLanguagesRaw;
+
     @Value("${parser.excluded-title-words}")
     private String excludedTitleWordsRaw;
 
@@ -45,13 +56,11 @@ public class JobProcessor {
     public JobProcessor(LinkedInJobParser parser,
                         JobRepository jobRepository,
                         OpenAiJobFitService openAiJobFitService,
-                        OpenAiProperties openAiProperties,
-                        TelegramService telegramService) {
+                        OpenAiProperties openAiProperties) {
         this.parser = parser;
         this.jobRepository = jobRepository;
         this.openAiJobFitService = openAiJobFitService;
         this.openAiProperties = openAiProperties;
-        this.telegramService = telegramService;
     }
 
     public void process() throws Exception {
@@ -63,68 +72,52 @@ public class JobProcessor {
         List<String> urls = buildSearchUrls(splitToList(javaKeywordsRaw));
         List<String> excludedTitleWords = splitToList(excludedTitleWordsRaw);
 
-        Predicate<Job> preDescriptionFilter = job ->
-                !hasExcludedTitleWord(job, excludedTitleWords)
-                        && containsJava(job)
-                        && hasAcceptableExperience(job);
+        Predicate<Job> preFilter = job ->
+                containsJava(job)
+                        && !hasExcludedTitleWord(job, excludedTitleWords);
 
-        processJobs(urls, preDescriptionFilter);
+        Predicate<Job> postFilter = job -> hasAcceptableExperience(job);
+
+        processJobs(urls, preFilter, postFilter);
     }
 
     public void processBigTechJobs() throws Exception {
         List<String> urls = buildSearchUrls(splitToList(bigTechKeywordsRaw));
+        List<String> bigTechCompanies = splitToList(bigTechCompaniesRaw);
+        List<String> excludedLanguages = splitToList(excludedLanguagesRaw);
         List<String> excludedTitleWords = splitToList(excludedTitleWordsRaw);
 
-        Predicate<Job> preDescriptionFilter = job ->
-                !hasExcludedTitleWord(job, excludedTitleWords)
+        Predicate<Job> preFilter = job ->
+                isBigTechCompany(job, bigTechCompanies)
+                        && !hasExcludedTitleWord(job, excludedTitleWords);
+
+        Predicate<Job> postFilter = job ->
+                (containsJava(job) || doesNotContainExcludedLanguages(job, excludedLanguages))
                         && hasAcceptableExperience(job);
 
-        processJobs(urls, preDescriptionFilter);
+        processJobs(urls, preFilter, postFilter);
     }
 
     private void processJobs(List<String> urls,
-                             Predicate<Job> preDescriptionFilter) throws Exception {
+                             Predicate<Job> preFilter,
+                             Predicate<Job> postFilter) throws Exception {
 
         for (String url : urls) {
-            try {
-                List<Job> jobs = parser.parse(url);
-                sleepRandom(3000, 7000);
+            List<Job> jobs = parser.parse(url);
 
-                for (Job job : jobs) {
-                    if (!preDescriptionFilter.test(job)) {
-                        continue;
-                    }
+            for (Job job : jobs) {
+                if (!preFilter.test(job)) continue;
+                if (!hasValidJobId(job)) continue;
+                if (jobRepository.existsByJobId(job.getJobId())) continue;
 
-                    if (!hasValidJobId(job) || jobRepository.existsByJobId(job.getJobId())) {
-                        continue;
-                    }
+                String description = parser.fetchDescriptionByJobId(job.getJobId());
+                job.setDescription(description);
 
-                    sleepRandom(2000, 5000);
-                    String description = parser.fetchDescriptionByJobId(job.getJobId());
-                    job.setDescription(description);
+                if (!languageDetector.isEnglishDescription(job.getDescription())) continue;
+                if (!postFilter.test(job)) continue;
 
-                    if (!languageDetector.isEnglishDescription(job.getDescription())) {
-                        continue;
-                    }
-
-                    evaluateAndAttachOpenAi(job);
-                    save(job);
-                }
-
-            } catch (Exception e) {
-                System.out.println("FAILED URL: " + url + " Reason: " + e.getMessage());
+                save(job);
             }
-        }
-    }
-
-    private void evaluateAndAttachOpenAi(Job job) {
-        if (!openAiProperties.isEnabled()) return;
-
-        try {
-            JobFitResponse response = openAiJobFitService.evaluate(job);
-            job.applyFitResponse(response);
-        } catch (Exception e) {
-            System.out.println("OpenAI evaluation failed for jobId=" + job.getJobId() + ", reason=" + e.getMessage());
         }
     }
 
@@ -145,9 +138,24 @@ public class JobProcessor {
         return JAVA_PATTERN.matcher(text).find();
     }
 
+    private boolean isBigTechCompany(Job job, List<String> companies) {
+        String company = safeLower(job.getCompany());
+        for (String item : companies) {
+            if (company.contains(item)) return true;
+        }
+        return false;
+    }
+
+    private boolean doesNotContainExcludedLanguages(Job job, List<String> excludedLanguages) {
+        String text = (safe(job.getTitle()) + " " + safe(job.getDescription())).toLowerCase();
+        for (String language : excludedLanguages) {
+            if (text.contains(language)) return false;
+        }
+        return true;
+    }
+
     private boolean hasAcceptableExperience(Job job) {
-        // Проверка по опыту в заголовке, если есть "5+ years" — фильтруем
-        String text = safeLower(job.getTitle()) + " " + safeLower(job.getDescription());
+        String text = (safe(job.getTitle()) + " " + safe(job.getDescription())).toLowerCase();
         for (int i = maxYearsExperience + 1; i <= 20; i++) {
             if (text.contains(i + "+")) return false;
         }
@@ -156,8 +164,6 @@ public class JobProcessor {
 
     private void save(Job job) {
         Job savedJob = jobRepository.save(job);
-        telegramService.sendJob(savedJob);
-
         System.out.println("NEW JOB SAVED: " + savedJob.getTitle() + " @ " + savedJob.getCompany());
     }
 
@@ -167,7 +173,7 @@ public class JobProcessor {
 
         for (String keyword : keywords) {
             for (String geoId : geoIds) {
-                urls.add(buildUrl(keyword, geoId));
+                urls.add(buildUrl(keyword, geoId)); // 21 URL получится
             }
         }
 
@@ -178,7 +184,9 @@ public class JobProcessor {
         String encodedKeyword = URLEncoder.encode(keyword, StandardCharsets.UTF_8);
         return "https://www.linkedin.com/jobs/search/?keywords="
                 + encodedKeyword
-                + "&geoId=" + geoId;
+                + "&geoId=" + geoId
+                + "&f_TPR=" + timePostedRaw
+                + "&f_WT=" + workTypeRaw;
     }
 
     private List<String> extractGeoIds(String raw) {
@@ -209,14 +217,5 @@ public class JobProcessor {
 
     private String safeLower(String value) {
         return safe(value).toLowerCase();
-    }
-
-    private void sleepRandom(long minMs, long maxMs) {
-        try {
-            long delay = minMs + (long) (Math.random() * (maxMs - minMs));
-            Thread.sleep(delay);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
     }
 }
