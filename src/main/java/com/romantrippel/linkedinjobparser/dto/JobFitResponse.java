@@ -11,6 +11,15 @@ public class JobFitResponse {
     public JobFitResponse() {
     }
 
+    public JobFitResponse(int fitScore, String seniority, String stack,
+                          String responsibilities, String matchReason) {
+        this.fitScore = fitScore;
+        this.seniority = seniority;
+        this.stack = stack;
+        this.responsibilities = responsibilities;
+        this.matchReason = matchReason;
+    }
+
     public int getFitScore() {
         return fitScore;
     }

@@ -26,4 +26,16 @@ public class TelegramProperties {
     public boolean isEnabled() {
         return enabled;
     }
+
+    public void setBotToken(String botToken) {
+        this.botToken = botToken;
+    }
+
+    public void setChatId(String chatId) {
+        this.chatId = chatId;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
 }

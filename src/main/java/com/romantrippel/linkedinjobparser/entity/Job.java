@@ -50,14 +50,21 @@ public class Job {
     public Job() {
     }
 
-    // Новый конструктор для парсера
-    public Job(String jobId, String title, String company, String location, String link, String description) {
+    public Job(String jobId, String title, String company, String location,
+               String link, String description, Integer fitScore, String seniority,
+               String stack, String responsibilities, String matchReason) {
         this.jobId = jobId;
         this.title = title;
         this.company = company;
         this.location = location;
         this.link = link;
         this.description = description;
+        this.fitScore = fitScore;
+        this.seniority = seniority;
+        this.stack = stack;
+        this.responsibilities = responsibilities;
+        this.matchReason = matchReason;
+        this.createdAt = OffsetDateTime.now();
     }
 
     @PrePersist
@@ -65,6 +72,21 @@ public class Job {
         if (createdAt == null) {
             createdAt = OffsetDateTime.now();
         }
+    }
+
+    public Job(String jobId,
+               String title,
+               String company,
+               String location,
+               String link,
+               String description) {
+
+        this.jobId = jobId;
+        this.title = title;
+        this.company = company;
+        this.location = location;
+        this.link = link;
+        this.description = description;
     }
 
     public void applyFitResponse(JobFitResponse response) {
@@ -149,5 +171,25 @@ public class Job {
 
     public OffsetDateTime getCreatedAt() {
         return createdAt;
+    }
+
+    public void setFitScore(Integer fitScore) {
+        this.fitScore = fitScore;
+    }
+
+    void setSeniority(String seniority) {
+        this.seniority = seniority;
+    }
+
+    void setStack(String stack) {
+        this.stack = stack;
+    }
+
+    void setResponsibilities(String responsibilities) {
+        this.responsibilities = responsibilities;
+    }
+
+    void setMatchReason(String matchReason) {
+        this.matchReason = matchReason;
     }
 }

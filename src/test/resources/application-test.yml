@@ -1,0 +1,44 @@
+spring:
+  datasource:
+    url: jdbc:tc:postgresql:16:///testdb   # special Testcontainers JDBC URL
+    username: test
+    password: test
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+parser:
+  geo-ids: "1,2,3"
+  java-keywords: "Java,Spring"
+  big-tech-keywords: "Amazon,Google,Meta"
+  f-tpr: "10"
+  f-wt: "5"
+  big-tech-companies: "Amazon,Google,Meta"
+  excluded-languages: "Python,Ruby"
+  excluded-title-words: "Intern,Junior"
+  interval: 60
+  max-years-experience: 5
+
+openai:
+  api-key: "test-api-key"
+  model: "gpt-test"
+  enabled: false
+  cover-letter-threshold: 80
+  timeout-ms: 5000
+  max-tokens: 512
+
+candidate:
+  profile: "TEST_PROFILE"
+
+telegram:
+  bot-token: "TEST_TOKEN"
+  chat-id: "123"
+  enabled: false
+  cover-letter-threshold: 80
