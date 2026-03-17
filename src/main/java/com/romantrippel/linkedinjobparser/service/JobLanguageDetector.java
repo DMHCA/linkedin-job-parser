@@ -1,67 +1,39 @@
 package com.romantrippel.linkedinjobparser.service;
 
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Locale;
-import java.util.Set;
+import com.optimaize.langdetect.LanguageDetector;
+import com.optimaize.langdetect.LanguageDetectorBuilder;
+import com.optimaize.langdetect.i18n.LdLocale;
+import com.optimaize.langdetect.ngram.NgramExtractors;
+import com.optimaize.langdetect.profiles.LanguageProfile;
+import com.optimaize.langdetect.profiles.LanguageProfileReader;
+import org.springframework.stereotype.Component;
 
+import java.io.IOException;
+import java.util.List;
+import com.google.common.base.Optional;
+
+@Component
 public class JobLanguageDetector {
 
-    private static final Set<String> ENGLISH_WORDS = Set.of(
-            "the", "and", "with", "for", "you", "your", "are", "our", "will", "have",
-            "work", "team", "experience", "role", "requirements", "responsibilities",
-            "skills", "engineer", "development", "design", "building", "support"
-    );
+    private final LanguageDetector languageDetector;
 
-    private static final Set<String> SPANISH_WORDS = Set.of(
-            "el", "la", "los", "las", "de", "del", "con", "para", "que", "una",
-            "un", "años", "experiencia", "requisitos", "responsabilidades",
-            "desarrollo", "trabajo", "equipo", "conocimiento", "persona"
-    );
-
-    private static final Set<String> PORTUGUESE_WORDS = Set.of(
-            "o", "a", "os", "as", "de", "do", "da", "com", "para", "que",
-            "uma", "um", "não", "anos", "experiência", "requisitos",
-            "responsabilidades", "desenvolvimento", "trabalho", "equipe"
-    );
-
-    public boolean isEnglishDescription(String text) {
-        if (text == null || text.isBlank()) {
-            return false;
+    public JobLanguageDetector() {
+        try {
+            List<LanguageProfile> languageProfiles = new LanguageProfileReader().readAllBuiltIn();
+            this.languageDetector = LanguageDetectorBuilder.create(NgramExtractors.standard())
+                    .withProfiles(languageProfiles)
+                    .build();
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to initialize language detector", e);
         }
-
-        String normalized = normalize(text);
-        String[] words = normalized.split("\\s+");
-
-        int englishScore = countMatches(words, ENGLISH_WORDS);
-        int spanishScore = countMatches(words, SPANISH_WORDS);
-        int portugueseScore = countMatches(words, PORTUGUESE_WORDS);
-
-        int maxForeignScore = Math.max(spanishScore, portugueseScore);
-
-        if (englishScore < 5) {
-            return false;
-        }
-
-        return englishScore >= maxForeignScore * 2;
     }
 
-    private int countMatches(String[] words, Set<String> dictionary) {
-        int score = 0;
+    public boolean isEnglishDescription(String description, String geoId, List<String> englishGeoIds) {
+        if (englishGeoIds.contains(geoId)) return true;
 
-        for (String word : words) {
-            if (dictionary.contains(word)) {
-                score++;
-            }
-        }
+        if (description == null || description.isBlank()) return false;
 
-        return score;
-    }
-
-    private String normalize(String text) {
-        return text.toLowerCase(Locale.ROOT)
-                .replaceAll("[^\\p{L}\\s]", " ")
-                .replaceAll("\\s+", " ")
-                .trim();
+        Optional<LdLocale> lang = languageDetector.detect(description);
+        return lang.isPresent() && "en".equals(lang.get().getLanguage());
     }
 }

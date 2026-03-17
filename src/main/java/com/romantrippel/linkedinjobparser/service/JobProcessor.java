@@ -54,6 +54,9 @@ public class JobProcessor {
     @Value("${parser.max-years-experience}")
     private int maxYearsExperience;
 
+    @Value("${parser.english-geo-ids}")
+    private List<String> englishGeoIds;
+
     public JobProcessor(LinkedInJobParser parser,
                         JobRepository jobRepository,
                         OpenAiJobFitService openAiJobFitService,
@@ -117,7 +120,7 @@ public class JobProcessor {
                     String description = parser.fetchDescriptionByJobId(job.getJobId());
                     job.setDescription(description);
 
-                    if (!languageDetector.isEnglishDescription(job.getDescription())) continue;
+                    if (!languageDetector.isEnglishDescription(description, extractGeoIdFromUrl(job.getLink()), englishGeoIds)) continue;
 
                     // OpenAI evaluation
                     evaluateAndAttachOpenAi(job);
@@ -132,6 +135,14 @@ public class JobProcessor {
                 System.out.println("FAILED URL: " + url + " Reason: " + e.getMessage());
             }
         }
+    }
+
+    private String extractGeoIdFromUrl(String url) {
+        int index = url.indexOf("geoId=");
+        if (index == -1) return null;
+        int end = url.indexOf("&", index);
+        if (end == -1) end = url.length();
+        return url.substring(index + 6, end);
     }
 
     private void evaluateAndAttachOpenAi(Job job) {

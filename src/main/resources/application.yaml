@@ -20,6 +20,7 @@ logging:
 
 parser:
   geo-ids: ${LINKEDIN_GEO_IDS}
+  english-geo-ids: ${ENGLISH_GEO_IDS}
   java-keywords: ${JAVA_KEYWORDS}
   big-tech-keywords: ${BIG_TECH_KEYWORDS}
   f-tpr: ${LINKEDIN_F_TPR}
