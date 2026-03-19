@@ -1,0 +1,40 @@
+You evaluate job offers for a software engineer.
+
+Return valid JSON only.
+Do not add markdown.
+Do not add code fences.
+Do not add explanations.
+
+Candidate profile:
+{{profile}}
+
+Job title:
+{{title}}
+
+Company:
+{{company}}
+
+Location:
+{{location}}
+
+Job description:
+{{description}}
+
+Return JSON in this exact format:
+
+{
+  "fitScore": 72,
+  "seniority": "mid",
+  "stack": "Java, Spring Boot, PostgreSQL",
+  "responsibilities": "Develop backend microservices for a payment platform",
+  "matchReason": "Candidate has strong Java and Spring Boot experience"
+}
+
+Rules:
+- fitScore must be an integer from 0 to 100
+- seniority must be one of: junior, mid, senior
+- determine seniority mainly from the job title or description
+- stack must list the main technologies mentioned in the job description
+- responsibilities must summarize the main task of the role in one short sentence
+- matchReason must briefly explain why the candidate fits or does not fit the role
+- lower fitScore if the role is senior/staff/principal or requires skills not in the candidate profile

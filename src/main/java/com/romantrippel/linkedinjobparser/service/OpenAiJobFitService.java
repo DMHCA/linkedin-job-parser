@@ -6,45 +6,50 @@ import com.romantrippel.linkedinjobparser.config.CandidateProperties;
 import com.romantrippel.linkedinjobparser.config.OpenAiProperties;
 import com.romantrippel.linkedinjobparser.dto.JobFitResponse;
 import com.romantrippel.linkedinjobparser.entity.Job;
-import org.springframework.http.MediaType;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import com.romantrippel.linkedinjobparser.loader.PromptLoader;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.*;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.Map;
 
 @Service
 public class OpenAiJobFitService {
 
-    private static final String OPENAI_URL = "https://api.openai.com/v1/responses";
+    private static final Logger log = LoggerFactory.getLogger(OpenAiJobFitService.class);
 
     private final OpenAiProperties openAiProperties;
     private final CandidateProperties candidateProperties;
-    private final ObjectMapper objectMapper = new ObjectMapper();
-    private final RestClient restClient;
+    private final PromptLoader promptLoader;
+    private final ObjectMapper objectMapper;
+    private final RestTemplate restTemplate;
 
     public OpenAiJobFitService(OpenAiProperties openAiProperties,
-                               CandidateProperties candidateProperties) {
-
+                               CandidateProperties candidateProperties,
+                               PromptLoader promptLoader,
+                               ObjectMapper objectMapper,
+                               RestTemplate restTemplate) {
         this.openAiProperties = openAiProperties;
         this.candidateProperties = candidateProperties;
-
-        SimpleClientHttpRequestFactory requestFactory =
-                new SimpleClientHttpRequestFactory();
-
-        requestFactory.setConnectTimeout(openAiProperties.getTimeoutMs());
-        requestFactory.setReadTimeout(openAiProperties.getTimeoutMs());
-
-        this.restClient = RestClient.builder()
-                .requestFactory(requestFactory)
-                .build();
+        this.promptLoader = promptLoader;
+        this.objectMapper = objectMapper;
+        this.restTemplate = restTemplate;
     }
 
     public JobFitResponse evaluate(Job job) {
 
-        try {
+        log.info("Sending job to OpenAI: jobId={}, title={}", job.getJobId(), job.getTitle());
 
-            String prompt = buildEvaluationPrompt(job);
+        try {
+            String promptTemplate = promptLoader.loadPrompt();
+            String prompt = buildEvaluationPrompt(promptTemplate, job);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(openAiProperties.getApiKey());
 
             Map<String, Object> requestBody = Map.of(
                     "model", openAiProperties.getModel(),
@@ -53,115 +58,81 @@ public class OpenAiJobFitService {
                     "reasoning", Map.of("effort", "minimal")
             );
 
-            String responseBody = restClient.post()
-                    .uri(OPENAI_URL)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .header("Authorization", "Bearer " + openAiProperties.getApiKey())
-                    .body(requestBody)
-                    .retrieve()
-                    .body(String.class);
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+
+            ResponseEntity<String> response = restTemplate.postForEntity(
+                    openAiProperties.getUrl(),
+                    entity,
+                    String.class
+            );
+
+            if (!response.getStatusCode().is2xxSuccessful()) {
+                log.error("OpenAI returned non-success status: {} for jobId={}",
+                        response.getStatusCode(), job.getJobId());
+                throw new RuntimeException("OpenAI returned status: " + response.getStatusCode());
+            }
+
+            String responseBody = response.getBody();
+
+            log.info("OpenAI response received: jobId={}", job.getJobId());
 
             String jsonText = extractOutputText(responseBody);
 
             return objectMapper.readValue(jsonText, JobFitResponse.class);
 
-        } catch (Exception e) {
+        } catch (RestClientException e) {
+            log.error("HTTP error while calling OpenAI. jobId={}, title={}",
+                    job.getJobId(),
+                    job.getTitle(),
+                    e);
+            throw new RuntimeException("HTTP error while calling OpenAI", e);
 
+        } catch (Exception e) {
+            log.error("OpenAI evaluation failed. jobId={}, title={}",
+                    job.getJobId(),
+                    job.getTitle(),
+                    e);
             throw new RuntimeException(
                     "OpenAI evaluation failed for jobId=" + job.getJobId()
-                            + ", title=" + job.getTitle()
-                            + ", reason=" + e.getMessage(),
+                            + ", title=" + job.getTitle(),
                     e
             );
         }
     }
 
-    private String buildEvaluationPrompt(Job job) {
-
-        return """
-You evaluate job offers for a software engineer.
-
-Return valid JSON only.
-Do not add markdown.
-Do not add code fences.
-
-Candidate profile:
-""" + candidateProperties.getProfile() + """
-
-Job title:
-""" + safe(job.getTitle()) + """
-
-Company:
-""" + safe(job.getCompany()) + """
-
-Location:
-""" + safe(job.getLocation()) + """
-
-Job description:
-""" + safe(job.getDescription()) + """
-
-Return JSON in this exact format:
-
-{
-  "fitScore": 72,
-  "seniority": "mid",
-  "stack": "Java, Spring Boot, PostgreSQL",
-  "responsibilities": "Разработка backend микросервисов для платежной платформы",
-  "matchReason": "У кандидата есть опыт Java и Spring Boot, стек совпадает примерно на 70%"
-}
-
-Rules:
-
-- fitScore must be integer from 0 to 100
-- seniority must be one of: junior, mid, senior
-- stack must list the main technologies
-- responsibilities must be one short sentence
-- matchReason must explain why the candidate fits
-""";
+    private String buildEvaluationPrompt(String template, Job job) {
+        return template
+                .replace("{{profile}}", candidateProperties.getProfile())
+                .replace("{{title}}", safe(job.getTitle()))
+                .replace("{{company}}", safe(job.getCompany()))
+                .replace("{{location}}", safe(job.getLocation()))
+                .replace("{{description}}", safe(job.getDescription()));
     }
 
-    private String extractOutputText(String responseBody) {
+    private String extractOutputText(String responseBody) throws Exception {
+        JsonNode root = objectMapper.readTree(responseBody);
 
-        try {
+        JsonNode outputText = root.path("output_text");
+        if (!outputText.isMissingNode() && !outputText.isNull()) {
+            return outputText.asText();
+        }
 
-            JsonNode root = objectMapper.readTree(responseBody);
-
-            JsonNode outputText = root.path("output_text");
-            if (!outputText.isMissingNode() && !outputText.isNull()) {
-                return outputText.asText();
-            }
-
-            JsonNode output = root.path("output");
-
-            if (output.isArray()) {
-
-                for (JsonNode item : output) {
-
-                    JsonNode content = item.path("content");
-
-                    if (content.isArray()) {
-
-                        for (JsonNode part : content) {
-
-                            JsonNode text = part.path("text");
-
-                            if (!text.isMissingNode() && !text.isNull()) {
-                                return text.asText();
-                            }
+        JsonNode output = root.path("output");
+        if (output.isArray()) {
+            for (JsonNode item : output) {
+                JsonNode content = item.path("content");
+                if (content.isArray()) {
+                    for (JsonNode part : content) {
+                        JsonNode text = part.path("text");
+                        if (!text.isMissingNode() && !text.isNull()) {
+                            return text.asText();
                         }
                     }
                 }
             }
-
-            throw new RuntimeException("Could not extract model text from response: " + responseBody);
-
-        } catch (Exception e) {
-
-            throw new RuntimeException(
-                    "Failed to parse OpenAI response. Raw body: " + responseBody,
-                    e
-            );
         }
+
+        throw new RuntimeException("Could not extract model text from response");
     }
 
     private String safe(String value) {

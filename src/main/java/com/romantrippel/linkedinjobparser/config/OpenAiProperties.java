@@ -1,50 +1,82 @@
 package com.romantrippel.linkedinjobparser.config;
 
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 @Component
+@ConfigurationProperties(prefix="openai")
 public class OpenAiProperties {
-
-    @Value("${openai.api-key}")
     private String apiKey;
-
-    @Value("${openai.model}")
     private String model;
-
-    @Value("${openai.enabled}")
     private boolean enabled;
-
-    @Value("${openai.cover-letter-threshold}")
     private int coverLetterThreshold;
-
-    @Value("${openai.timeout-ms}")
     private int timeoutMs;
-
-    @Value("${openai.max-tokens}")
     private int maxTokens;
+    private String url;
+    private String promptPath;
 
     public String getApiKey() {
         return apiKey;
+    }
+
+    public void setApiKey(String apiKey) {
+        this.apiKey = apiKey;
     }
 
     public String getModel() {
         return model;
     }
 
+    public void setModel(String model) {
+        this.model = model;
+    }
+
     public boolean isEnabled() {
         return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
     }
 
     public int getCoverLetterThreshold() {
         return coverLetterThreshold;
     }
 
+    public void setCoverLetterThreshold(int coverLetterThreshold) {
+        this.coverLetterThreshold = coverLetterThreshold;
+    }
+
     public int getTimeoutMs() {
         return timeoutMs;
+    }
+
+    public void setTimeoutMs(int timeoutMs) {
+        this.timeoutMs = timeoutMs;
     }
 
     public int getMaxTokens() {
         return maxTokens;
     }
+
+    public void setMaxTokens(int maxTokens) {
+        this.maxTokens = maxTokens;
+    }
+
+    public String getUrl() {
+        return url;
+    }
+
+    public void setUrl(String url) {
+        this.url = url;
+    }
+
+    public String getPromptPath() {
+        return promptPath;
+    }
+
+    public void setPromptPath(String promptPath) {
+        this.promptPath = promptPath;
+    }
 }
+

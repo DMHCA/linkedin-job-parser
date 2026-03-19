@@ -33,11 +33,13 @@ parser:
 
 openai:
   api-key: ${OPENAI_API_KEY}
-  model: ${OPENAI_MODEL}
-  enabled: ${OPENAI_ENABLED}
-  cover-letter-threshold: ${OPENAI_COVER_LETTER_THRESHOLD}
-  timeout-ms: ${OPENAI_TIMEOUT_MS}
-  max-tokens: ${OPENAI_MAX_TOKENS}
+  url: ${OPENAI_URL:https://api.openai.com/v1/responses}
+  model: ${OPENAI_MODEL:gpt-4.1-mini}
+  enabled: ${OPENAI_ENABLED:true}
+  timeout-ms: ${OPENAI_TIMEOUT_MS:10000}
+  max-tokens: ${OPENAI_MAX_TOKENS:500}
+  cover-letter-threshold: ${OPENAI_COVER_LETTER_THRESHOLD:70}
+  prompt-path: classpath:prompts/job-fit.txt
 
 candidate:
   profile: ${CANDIDATE_PROFILE}
