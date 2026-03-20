@@ -43,6 +43,23 @@ class OpenAiJobFitServiceTest {
         );
     }
 
+    // =========================================
+    // helper method
+    // =========================================
+    private void mockOpenAiResponse(String body, HttpStatus status) {
+        ResponseEntity<String> response = new ResponseEntity<>(body, status);
+
+        when(restTemplate.postForEntity(
+                anyString(),
+                ArgumentMatchers.<HttpEntity<?>>any(),
+                eq(String.class)
+        )).thenReturn(response);
+    }
+
+    // =========================================
+    // tests
+    // =========================================
+
     @Test
     void evaluate_shouldReturnJobFitResponse_whenOpenAiReturnsValidJson() throws Exception {
 
@@ -68,13 +85,7 @@ class OpenAiJobFitServiceTest {
                 }
                 """;
 
-        ResponseEntity<String> response = new ResponseEntity<>(openAiResponse, HttpStatus.OK);
-
-        when(restTemplate.postForEntity(
-                anyString(),
-                ArgumentMatchers.<HttpEntity<?>>any(),
-                eq(String.class))
-        ).thenReturn(response);
+        mockOpenAiResponse(openAiResponse, HttpStatus.OK);
 
         // when
         JobFitResponse result = service.evaluate(job);
@@ -84,6 +95,12 @@ class OpenAiJobFitServiceTest {
         assertEquals(80, result.getFitScore());
         assertEquals("mid", result.getSeniority());
         assertEquals("Java, Spring Boot", result.getStack());
+
+        verify(restTemplate, times(1)).postForEntity(
+                anyString(),
+                ArgumentMatchers.<HttpEntity<?>>any(),
+                eq(String.class)
+        );
     }
 
     @Test
@@ -101,11 +118,7 @@ class OpenAiJobFitServiceTest {
         when(openAiProperties.getMaxTokens()).thenReturn(100);
         when(openAiProperties.getUrl()).thenReturn("url");
 
-        ResponseEntity<String> response =
-                new ResponseEntity<>("error", HttpStatus.INTERNAL_SERVER_ERROR);
-
-        when(restTemplate.postForEntity(anyString(), any(), eq(String.class)))
-                .thenReturn(response);
+        mockOpenAiResponse("error", HttpStatus.INTERNAL_SERVER_ERROR);
 
         // when + then
         assertThrows(RuntimeException.class, () -> service.evaluate(job));
@@ -126,8 +139,11 @@ class OpenAiJobFitServiceTest {
         when(openAiProperties.getMaxTokens()).thenReturn(100);
         when(openAiProperties.getUrl()).thenReturn("url");
 
-        when(restTemplate.postForEntity(anyString(), any(), eq(String.class)))
-                .thenThrow(new RestClientException("Connection failed"));
+        when(restTemplate.postForEntity(
+                anyString(),
+                ArgumentMatchers.<HttpEntity<?>>any(),
+                eq(String.class)
+        )).thenThrow(new RestClientException("Connection failed"));
 
         // when + then
         assertThrows(RuntimeException.class, () -> service.evaluate(job));
@@ -152,18 +168,14 @@ class OpenAiJobFitServiceTest {
                 { "output_text": "not a json" }
                 """;
 
-        ResponseEntity<String> response =
-                new ResponseEntity<>(brokenJson, HttpStatus.OK);
-
-        when(restTemplate.postForEntity(anyString(), any(), eq(String.class)))
-                .thenReturn(response);
+        mockOpenAiResponse(brokenJson, HttpStatus.OK);
 
         // when + then
         assertThrows(RuntimeException.class, () -> service.evaluate(job));
     }
 
     @Test
-    void evaluate_shouldHandleNullFieldsInJob() {
+    void evaluate_shouldHandleNullFieldsInJob() throws Exception {
 
         // given
         Job job = new Job();
@@ -187,11 +199,7 @@ class OpenAiJobFitServiceTest {
                 }
                 """;
 
-        ResponseEntity<String> response =
-                new ResponseEntity<>(openAiResponse, HttpStatus.OK);
-
-        when(restTemplate.postForEntity(anyString(), any(), eq(String.class)))
-                .thenReturn(response);
+        mockOpenAiResponse(openAiResponse, HttpStatus.OK);
 
         // when
         JobFitResponse result = service.evaluate(job);

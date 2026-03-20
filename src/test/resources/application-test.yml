@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:tc:postgresql:16:///testdb   # special Testcontainers JDBC URL
+    url: jdbc:tc:postgresql:16:///testdb
     username: test
     password: test
     driver-class-name: org.postgresql.Driver
@@ -16,6 +16,7 @@ spring:
 
 parser:
   geo-ids: "1,2,3"
+  english-geo-ids: "1,2,3"   # ← добавлено
   java-keywords: "Java,Spring"
   big-tech-keywords: "Amazon,Google,Meta"
   f-tpr: "10"
@@ -28,11 +29,13 @@ parser:
 
 openai:
   api-key: "test-api-key"
+  url: "https://api.openai.com/v1/responses"
   model: "gpt-test"
   enabled: false
   cover-letter-threshold: 80
   timeout-ms: 5000
   max-tokens: 512
+  prompt-path: classpath:prompts/job-fit.txt
 
 candidate:
   profile: "TEST_PROFILE"

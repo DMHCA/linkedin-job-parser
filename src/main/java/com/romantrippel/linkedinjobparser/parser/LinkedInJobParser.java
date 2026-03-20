@@ -4,7 +4,6 @@ import com.romantrippel.linkedinjobparser.entity.Job;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -17,22 +16,16 @@ public class LinkedInJobParser {
         try {
             List<Job> jobs = new ArrayList<>();
 
-            Document doc = Jsoup.connect(url)
-                    .userAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
-                    .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9")
-                    .header("Accept-Language", "en-US,en;q=0.9")
-                    .header("Cache-Control", "no-cache")
-                    .header("Connection", "keep-alive")
-                    .header("Upgrade-Insecure-Requests", "1")
-                    .timeout(15000)
-                    .get();
+            Document doc = fetchDocument(url);
 
-            Elements jobElements = doc.select("ul.jobs-search__results-list li");
+            var jobElements = doc.select("ul.jobs-search__results-list li");
 
             for (Element jobElement : jobElements) {
-                String title = jobElement.select("h3").text();
-                String company = jobElement.select("h4").text();
-                String location = jobElement.select(".job-search-card__location").text();
+
+                String title = extractText(jobElement, "h3");
+                String company = extractText(jobElement, "h4");
+                String location = extractText(jobElement, ".job-search-card__location");
+
                 String link = extractJobLink(jobElement);
                 String jobId = extractJobId(link);
 
@@ -44,6 +37,7 @@ public class LinkedInJobParser {
             }
 
             return jobs;
+
         } catch (org.jsoup.HttpStatusException e) {
             if (e.getStatusCode() == 429) {
                 throw new RuntimeException("LinkedIn rate limit hit (429) for url: " + url, e);
@@ -51,7 +45,6 @@ public class LinkedInJobParser {
             throw e;
         }
     }
-
 
     public String fetchDescriptionByJobId(String jobId) {
         try {
@@ -80,50 +73,10 @@ public class LinkedInJobParser {
         }
     }
 
-    public String fetchLogoUrlByJobId(String jobId) {
-        try {
-            Document jobDoc = fetchJobDocument(jobId);
-
-            Element image = jobDoc.selectFirst(".artdeco-entity-image img");
-
-            if (image == null) {
-                image = jobDoc.selectFirst(".topcard__flavor-row img");
-            }
-
-            if (image == null) {
-                image = jobDoc.selectFirst(".topcard__org-name-link + * img");
-            }
-
-            if (image == null) {
-                image = jobDoc.selectFirst("img");
-            }
-
-            if (image == null) {
-                return "";
-            }
-
-            String logoUrl = image.attr("src");
-
-            if (logoUrl == null || logoUrl.isBlank()) {
-                logoUrl = image.attr("data-delayed-url");
-            }
-
-            if (logoUrl == null || logoUrl.isBlank()) {
-                logoUrl = image.attr("data-ghost-url");
-            }
-
-            return logoUrl == null ? "" : logoUrl.trim();
-
-        } catch (Exception e) {
-            return "";
-        }
-    }
-
-    private Document fetchJobDocument(String jobId) throws Exception {
-        String publicUrl = buildPublicJobUrl(jobId);
-
-        return Jsoup.connect(publicUrl)
-                .userAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+    protected Document fetchDocument(String url) throws Exception {
+        return Jsoup.connect(url)
+                .userAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
+                        "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
                 .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9")
                 .header("Accept-Language", "en-US,en;q=0.9")
                 .header("Cache-Control", "no-cache")
@@ -133,14 +86,28 @@ public class LinkedInJobParser {
                 .get();
     }
 
-    private String extractJobLink(Element jobElement) {
-        String link = jobElement.select("a.base-card__full-link").attr("href");
+    private Document fetchJobDocument(String jobId) throws Exception {
+        String publicUrl = buildPublicJobUrl(jobId);
+        return fetchDocument(publicUrl);
+    }
 
-        if (link == null || link.isBlank()) {
-            link = jobElement.select("a").attr("href");
+    private String extractText(Element parent, String selector) {
+        Element el = parent.selectFirst(selector);
+        return el == null ? "" : el.text().trim();
+    }
+
+    private String extractJobLink(Element jobElement) {
+        Element linkElement = jobElement.selectFirst("a.base-card__full-link");
+
+        if (linkElement == null) {
+            linkElement = jobElement.selectFirst("a");
         }
 
-        return link == null ? "" : link.trim();
+        if (linkElement == null) {
+            return "";
+        }
+
+        return linkElement.attr("href").trim();
     }
 
     private String extractJobId(String link) {
@@ -155,11 +122,11 @@ public class LinkedInJobParser {
             cleanLink = cleanLink.substring(0, questionIndex);
         }
 
-        String viewMarker = "/view/";
-        int viewIndex = cleanLink.indexOf(viewMarker);
+        String marker = "/view/";
+        int index = cleanLink.indexOf(marker);
 
-        if (viewIndex != -1) {
-            String tail = cleanLink.substring(viewIndex + viewMarker.length());
+        if (index != -1) {
+            String tail = cleanLink.substring(index + marker.length());
 
             if (tail.matches("\\d+")) {
                 return tail;
@@ -175,11 +142,9 @@ public class LinkedInJobParser {
             }
         }
 
-        String currentJobIdMarker = "currentJobId=";
-        int currentJobIdIndex = link.indexOf(currentJobIdMarker);
-
-        if (currentJobIdIndex != -1) {
-            int start = currentJobIdIndex + currentJobIdMarker.length();
+        int paramIndex = link.indexOf("currentJobId=");
+        if (paramIndex != -1) {
+            int start = paramIndex + "currentJobId=".length();
             int end = start;
 
             while (end < link.length() && Character.isDigit(link.charAt(end))) {
