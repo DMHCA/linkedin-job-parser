@@ -29,7 +29,7 @@ parser:
   excluded-languages: ${EXCLUDED_LANGUAGES}
   excluded-title-words: ${EXCLUDED_TITLE_WORDS}
   interval: ${PARSER_INTERVAL}
-  max-years-experience: ${PARSER_MAX_YEARS_EXPERIENCE:5}
+  max-years-experience: ${PARSER_MAX_YEARS_EXPERIENCE:4}
 
 openai:
   api-key: ${OPENAI_API_KEY}

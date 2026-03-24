@@ -1,21 +1,27 @@
 package com.romantrippel.linkedinjobparser.service;
 
 import com.romantrippel.linkedinjobparser.config.OpenAiProperties;
+import com.romantrippel.linkedinjobparser.config.ParserProperties;
 import com.romantrippel.linkedinjobparser.entity.Job;
 import com.romantrippel.linkedinjobparser.dto.JobFitResponse;
 import com.romantrippel.linkedinjobparser.parser.LinkedInJobParser;
 import com.romantrippel.linkedinjobparser.repository.JobRepository;
-import org.springframework.beans.factory.annotation.Value;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDate;
 import java.util.*;
 import java.util.function.Predicate;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
 public class JobProcessor {
+
+    private static final Logger log = LoggerFactory.getLogger(JobProcessor.class);
 
     private static final Pattern JAVA_PATTERN =
             Pattern.compile("(?i)(\\bjava\\b|\\bjava\\d+\\b)");
@@ -26,58 +32,36 @@ public class JobProcessor {
     private final OpenAiJobFitService openAiJobFitService;
     private final OpenAiProperties openAiProperties;
     private final TelegramService telegramService;
+    private final ParserProperties parserProperties;
 
-    @Value("${parser.geo-ids}")
-    private String geoIdsRaw;
-
-    @Value("${parser.java-keywords}")
-    private String javaKeywordsRaw;
-
-    @Value("${parser.big-tech-keywords}")
-    private String bigTechKeywordsRaw;
-
-    @Value("${parser.f-tpr}")
-    private String timePostedRaw;
-
-    @Value("${parser.f-wt}")
-    private String workTypeRaw;
-
-    @Value("${parser.big-tech-companies}")
-    private String bigTechCompaniesRaw;
-
-    @Value("${parser.excluded-languages}")
-    private String excludedLanguagesRaw;
-
-    @Value("${parser.excluded-title-words}")
-    private String excludedTitleWordsRaw;
-
-    @Value("${parser.max-years-experience}")
-    private int maxYearsExperience;
-
-    @Value("${parser.english-geo-ids}")
-    private List<String> englishGeoIds;
+    private LocalDate currentDay;
 
     public JobProcessor(LinkedInJobParser parser,
                         JobRepository jobRepository,
                         OpenAiJobFitService openAiJobFitService,
                         OpenAiProperties openAiProperties,
-                        TelegramService telegramService) {
+                        TelegramService telegramService,
+                        ParserProperties parserProperties) {
         this.parser = parser;
         this.jobRepository = jobRepository;
         this.openAiJobFitService = openAiJobFitService;
         this.openAiProperties = openAiProperties;
         this.telegramService = telegramService;
+        this.parserProperties = parserProperties;
     }
 
     public void process() throws Exception {
+        noticeOfNewDay();
         processJavaJobs();
         processBigTechJobs();
     }
 
     // ========================= JAVA FLOW =========================
+
     public void processJavaJobs() throws Exception {
-        List<String> urls = buildSearchUrls(splitToList(javaKeywordsRaw));
-        List<String> excludedTitleWords = splitToList(excludedTitleWordsRaw);
+
+        List<String> urls = buildSearchUrls(parserProperties.getJavaKeywords());
+        List<String> excludedTitleWords = parserProperties.getExcludedTitleWords();
 
         Predicate<Job> preFilter = job ->
                 !hasExcludedTitleWord(job, excludedTitleWords)
@@ -88,9 +72,11 @@ public class JobProcessor {
     }
 
     // ========================= BIG TECH FLOW =========================
+
     public void processBigTechJobs() throws Exception {
-        List<String> urls = buildSearchUrls(splitToList(bigTechKeywordsRaw));
-        List<String> excludedTitleWords = splitToList(excludedTitleWordsRaw);
+
+        List<String> urls = buildSearchUrls(parserProperties.getBigTechCompanies());
+        List<String> excludedTitleWords = parserProperties.getExcludedTitleWords();
 
         Predicate<Job> preFilter = job ->
                 !hasExcludedTitleWord(job, excludedTitleWords)
@@ -100,10 +86,11 @@ public class JobProcessor {
     }
 
     // ========================= MAIN PROCESSING =========================
+
     private void processJobs(List<String> urls, Predicate<Job> preFilter) throws Exception {
 
-        List<String> excludedLanguages = splitToList(excludedLanguagesRaw);
-        List<String> bigTechCompanies = splitToList(bigTechCompaniesRaw);
+        List<String> excludedLanguages = parserProperties.getExcludedLanguages();
+        List<String> englishGeoIds = parserProperties.getEnglishGeoIds();
 
         for (String url : urls) {
             try {
@@ -120,7 +107,11 @@ public class JobProcessor {
                     String description = parser.fetchDescriptionByJobId(job.getJobId());
                     job.setDescription(description);
 
-                    if (!languageDetector.isEnglishDescription(description, extractGeoIdFromUrl(job.getLink()), englishGeoIds)) continue;
+                    if (!languageDetector.isEnglishDescription(
+                            description,
+                            extractGeoIdFromUrl(job.getLink()),
+                            englishGeoIds
+                    )) continue;
 
                     // OpenAI evaluation
                     evaluateAndAttachOpenAi(job);
@@ -162,6 +153,7 @@ public class JobProcessor {
     }
 
     // ========================= FILTER METHODS =========================
+
     private boolean hasExcludedTitleWord(Job job, List<String> words) {
         String title = safeLower(job.getTitle());
         for (String word : words) {
@@ -176,10 +168,22 @@ public class JobProcessor {
     }
 
     private boolean hasAcceptableExperience(Job job) {
+
+        int maxYearsExperience = parserProperties.getMaxYearsExperience();
+
         String text = safeLower(job.getTitle()) + " " + safeLower(job.getDescription());
-        for (int i = maxYearsExperience + 1; i <= 20; i++) {
-            if (text.contains(i + "+")) return false;
+
+        Pattern pattern = Pattern.compile("(\\d+)\\s*\\+?\\s*(years|year|yrs|yr)");
+
+        Matcher matcher = pattern.matcher(text);
+
+        while (matcher.find()) {
+            int years = Integer.parseInt(matcher.group(1));
+            if (years > maxYearsExperience) {
+                return false;
+            }
         }
+
         return true;
     }
 
@@ -192,49 +196,32 @@ public class JobProcessor {
     }
 
     // ========================= URL GENERATION =========================
+
     private List<String> buildSearchUrls(List<String> keywords) {
+
+        Map<String, Integer> geoMap = parseGeoIds(parserProperties.getGeoIds());
         List<String> urls = new ArrayList<>();
-        List<String> geoIds = extractGeoIds(geoIdsRaw);
 
         for (String keyword : keywords) {
-            for (String geoId : geoIds) {
+            for (Integer geoId : geoMap.values()) {
                 urls.add(buildUrl(keyword, geoId));
             }
         }
+
         return urls;
     }
 
-    private String buildUrl(String keyword, String geoId) {
+    private String buildUrl(String keyword, Integer geoId) {
         String encodedKeyword = URLEncoder.encode(keyword, StandardCharsets.UTF_8);
+
         return "https://www.linkedin.com/jobs/search/?keywords="
                 + encodedKeyword
                 + "&geoId=" + geoId
-                + "&f_TPR=" + timePostedRaw
-                + "&f_WT=" + workTypeRaw;
-    }
-
-    private List<String> extractGeoIds(String raw) {
-        return Arrays.stream(raw.split(","))
-                .map(String::trim)
-                .filter(s -> !s.isBlank())
-                .map(this::extractGeoId)
-                .filter(s -> !s.isBlank())
-                .toList();
-    }
-
-    private String extractGeoId(String value) {
-        int colonIndex = value.indexOf(":");
-        return colonIndex == -1 ? value.trim() : value.substring(colonIndex + 1).trim();
+                + "&f_TPR=" + parserProperties.getFTpr()
+                + "&f_WT=" + parserProperties.getFWt();
     }
 
     // ========================= HELPERS =========================
-    private List<String> splitToList(String raw) {
-        return Arrays.stream(raw.split(","))
-                .map(String::trim)
-                .map(String::toLowerCase)
-                .filter(s -> !s.isBlank())
-                .toList();
-    }
 
     private String safe(String value) {
         return value == null ? "" : value;
@@ -257,6 +244,40 @@ public class JobProcessor {
             Thread.sleep(delay);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+        }
+    }
+
+    private Map<String, Integer> parseGeoIds(String raw) {
+        if (raw == null || raw.isBlank()) return Map.of();
+
+        Map<String, Integer> result = new LinkedHashMap<>();
+
+        String[] entries = raw.split(",");
+        for (String entry : entries) {
+
+            String[] parts = entry.split(":");
+            if (parts.length != 2) continue;
+
+            String country = parts[0].trim().toLowerCase();
+            String value = parts[1].trim();
+
+            try {
+                result.put(country, Integer.valueOf(value));
+            } catch (NumberFormatException e) {
+                System.out.println("Invalid geoId: " + entry);
+            }
+        }
+
+        return result;
+    }
+
+    private void noticeOfNewDay() {
+
+        LocalDate today = LocalDate.now();
+
+        if (!today.equals(currentDay)) {
+            currentDay = today;
+            log.info("New day started: {}", today);
         }
     }
 }
