@@ -27,6 +27,9 @@ jobs:
       - name: Make mvnw executable
         run: chmod +x mvnw
 
+      - name: Start Docker
+        run: sudo systemctl start docker
+
       # Step 4 - Build project and run unit tests
       - name: Build project and run tests
         run: ./mvnw clean verify

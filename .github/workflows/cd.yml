@@ -1,0 +1,40 @@
+name: CD - Deploy to EC2
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Connect to EC2 and deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+                 - name: Connect to EC2 and deploy
+                 uses: appleboy/ssh-action@v1.0.3
+                 with:
+                   host: ${{ secrets.EC2_HOST }}
+                   username: ubuntu
+                   key: ${{ secrets.EC2_SSH_KEY }}
+                   script: |
+                     cd ~/linkedin-job-parser
+                     
+                     # Login to AWS ECR
+                     aws ecr get-login-password --region us-east-1 | docker login \
+                         --username AWS --password-stdin 506374856960.dkr.ecr.us-east-1.amazonaws.com
+                     
+                     # Pull image with correct version
+                     docker pull 506374856960.dkr.ecr.us-east-1.amazonaws.com/linkedin-job-parser:${{ env.VERSION }}
+                     
+                     # Tag as latest
+                     docker tag 506374856960.dkr.ecr.us-east-1.amazonaws.com/linkedin-job-parser:${{ env.VERSION }} \
+                                506374856960.dkr.ecr.us-east-1.amazonaws.com/linkedin-job-parser:latest
+                     
+                     # Restart containers
+                     docker compose down
+                     docker compose up -d
