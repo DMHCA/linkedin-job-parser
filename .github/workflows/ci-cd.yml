@@ -1,0 +1,116 @@
+name: CI/CD - Build, Test, Push Docker Image and Deploy
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-push:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.VERSION }}
+
+    steps:
+      # Checkout repository
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Set up Java 21
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      # Make mvnw executable
+      - name: Make mvnw executable
+        run: chmod +x mvnw
+
+      # Build project and run tests
+      - name: Build project and run tests
+        run: ./mvnw clean verify
+
+      # Get project version from pom.xml
+      - name: Get project version
+        id: get_version
+        run: |
+          # step 1: extract version from pom.xml
+          VERSION=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "::set-output name=VERSION::$VERSION"
+
+      # Configure AWS credentials
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # Login to Amazon ECR
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Build and push Docker image with version
+      - name: Build and push Docker image
+        run: |
+          # step 1: build image with version tag
+          docker build -t linkedin-job-parser:${{ env.VERSION }} .
+          # step 2: tag for AWS ECR
+          docker tag linkedin-job-parser:${{ env.VERSION }} \
+                     ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/linkedin-job-parser:${{ env.VERSION }}
+          docker tag linkedin-job-parser:${{ env.VERSION }} \
+                     ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/linkedin-job-parser:latest
+          # step 3: push both tags
+          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/linkedin-job-parser:${{ env.VERSION }}
+          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/linkedin-job-parser:latest
+
+  deploy:
+    name: Deploy to EC2 if version changed
+    runs-on: ubuntu-latest
+    needs: build-and-push
+
+    steps:
+      # Deploy via SSH only if version changed
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # step 1: go to project directory
+            cd ~/linkedin-job-parser
+
+            # step 2: read last deployed version
+            if [ -f last_version ]; then
+              LAST=$(cat last_version)
+            else
+              LAST=""
+            fi
+
+            # step 3: get new version from CI output
+            NEW="${{ needs.build-and-push.outputs.version }}"
+
+            # step 4: deploy only if version changed
+            if [ "$NEW" != "$LAST" ]; then
+              echo "Version changed ($LAST -> $NEW). Deploying..."
+              # step 4a: login to AWS ECR
+              aws ecr get-login-password --region us-east-1 | docker login \
+                  --username AWS --password-stdin 506374856960.dkr.ecr.us-east-1.amazonaws.com
+              # step 4b: pull new Docker image
+              docker pull 506374856960.dkr.ecr.us-east-1.amazonaws.com/linkedin-job-parser:$NEW
+              docker tag 506374856960.dkr.ecr.us-east-1.amazonaws.com/linkedin-job-parser:$NEW \
+                         506374856960.dkr.ecr.us-east-1.amazonaws.com/linkedin-job-parser:latest
+              # step 4c: restart containers
+              docker compose down
+              docker compose up -d
+              # step 4d: save deployed version
+              echo "$NEW" > last_version
+            else
+              echo "Version not changed ($NEW). Skipping deploy."
+            fi
