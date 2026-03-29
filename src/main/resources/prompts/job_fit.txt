@@ -23,18 +23,25 @@ Job description:
 Return JSON in this exact format:
 
 {
-  "fitScore": 72,
-  "seniority": "mid",
-  "stack": "Java, Spring Boot, PostgreSQL",
-  "responsibilities": "Develop backend microservices for a payment platform",
-  "matchReason": "Candidate has strong Java and Spring Boot experience"
+"fitScore": 72,
+"seniority": "mid",
+"stack": "Java, Spring Boot, PostgreSQL",
+"responsibilities": "Develop backend microservices for a payment platform",
+"matchReason": "Candidate has strong Java and Spring Boot experience"
 }
 
 Rules:
-- fitScore must be an integer from 0 to 100
-- seniority must be one of: junior, mid, senior
-- determine seniority mainly from the job title or description
-- stack must list the main technologies mentioned in the job description
-- responsibilities must summarize the main task of the role in one short sentence
-- matchReason must briefly explain why the candidate fits or does not fit the role
-- lower fitScore if the role is senior/staff/principal or requires skills not in the candidate profile
+
+fitScore must be an integer from 0 to 100
+seniority must be one of: junior, mid, senior
+determine seniority relative to the candidate
+use:
+"junior" if the candidate is clearly below the job requirements
+"mid" if the candidate roughly matches the job level
+"senior" if the candidate exceeds the job requirements
+stack must list the main technologies mentioned in the job description
+responsibilities must summarize the main task of the role in one short sentence
+matchReason must briefly explain why the candidate fits or does not fit the role
+lower fitScore if the role requires significantly more experience or key skills that the candidate does not have
+heavily penalize missing core technologies explicitly required in the job
+prefer conservative scoring; avoid scores above 75 unless the candidate matches most key requirements including experience and core technologies

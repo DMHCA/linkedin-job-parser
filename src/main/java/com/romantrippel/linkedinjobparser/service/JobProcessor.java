@@ -113,11 +113,11 @@ public class JobProcessor {
                             englishGeoIds
                     )) continue;
 
-                    // OpenAI evaluation
-                    evaluateAndAttachOpenAi(job);
-
                     // Additional Big Tech post-filter
                     if (!containsJava(job) && !doesNotContainExcludedLanguages(job, excludedLanguages)) continue;
+
+                    // OpenAI evaluation
+                    evaluateAndAttachOpenAi(job);
 
                     save(job);
                 }

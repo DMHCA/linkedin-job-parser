@@ -1,5 +1,6 @@
-app:
-  version: ${APP_VERSION:0.0.1-SNAPSHOT}
+info:
+  app:
+    version: @project.version@
 
 spring:
   datasource:
@@ -10,12 +11,12 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: none
     show-sql: false
 
   flyway:
     enabled: true
-    locations: classpath:db/migration
+    baseline-on-migrate: true
 
 logging:
   level:

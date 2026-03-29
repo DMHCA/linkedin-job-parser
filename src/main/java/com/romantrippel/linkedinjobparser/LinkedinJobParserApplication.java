@@ -11,4 +11,5 @@ public class LinkedinJobParserApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(LinkedinJobParserApplication.class, args);
 	}
+
 }

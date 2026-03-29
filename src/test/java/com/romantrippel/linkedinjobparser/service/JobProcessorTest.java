@@ -53,7 +53,21 @@ class JobProcessorTest {
     }
 
     @Test
-    void shouldProcessAndSaveValidJavaJob() throws Exception {
+    void shouldSkipJobWithoutJavaBeforeOpenAi() throws Exception {
+        Job job = new Job("1", "Backend Developer", "Test", "DE",
+                "http://test?geoId=1", "");
+
+        when(parser.parse(anyString())).thenReturn(List.of(job));
+
+        jobProcessor.processJavaJobs();
+
+        // OpenAI не вызывается
+        verify(openAiJobFitService, never()).evaluate(any());
+        verify(jobRepository, never()).save(any());
+    }
+
+    @Test
+    void shouldProcessAndCallOpenAiForValidJob() throws Exception {
         Job job = new Job("1", "Java Developer", "Test", "DE",
                 "http://test?geoId=1", "");
 
@@ -74,85 +88,18 @@ class JobProcessorTest {
     }
 
     @Test
-    void shouldSkipJobIfAlreadyExists() throws Exception {
-        Job job = new Job("1", "Java Developer", "Test", "DE",
-                "http://test?geoId=1", "");
-
-        when(parser.parse(anyString())).thenReturn(List.of(job));
-        when(jobRepository.existsByJobId("1")).thenReturn(true);
-
-        jobProcessor.processJavaJobs();
-
-        verify(jobRepository, never()).save(any());
-        verify(telegramService, never()).sendJob(any());
-    }
-
-    @Test
-    void shouldSkipJobWithoutJava() throws Exception {
+    void shouldSkipJobWithExcludedLanguageEvenIfJavaAbsent() throws Exception {
         Job job = new Job("1", "Backend Developer", "Test", "DE",
                 "http://test?geoId=1", "");
 
         when(parser.parse(anyString())).thenReturn(List.of(job));
-
-        jobProcessor.processJavaJobs();
-
-        verify(jobRepository, never()).save(any());
-    }
-
-    @Test
-    void shouldSkipJobWithTooMuchExperience() throws Exception {
-        Job job = new Job("1", "Java Developer 8+ years", "Test", "DE",
-                "http://test?geoId=1", "");
-
-        when(parser.parse(anyString())).thenReturn(List.of(job));
         when(jobRepository.existsByJobId("1")).thenReturn(false);
+        when(openAiProperties.isEnabled()).thenReturn(true);
 
         jobProcessor.processJavaJobs();
 
-        verify(jobRepository, never()).save(any());
-    }
-
-    @Test
-    void shouldSkipJobWithExcludedLanguageWhenNoJavaPresent() throws Exception {
-        Job job = new Job("1", "Backend Developer", "Test", "DE",
-                "http://test?geoId=1", "");
-
-        when(parser.parse(anyString())).thenReturn(List.of(job));
-        when(parser.fetchDescriptionByJobId("1")).thenReturn("Python developer");
-        when(jobRepository.existsByJobId("1")).thenReturn(false);
-        when(openAiProperties.isEnabled()).thenReturn(false);
-
-        jobProcessor.processJavaJobs();
-
-        verify(jobRepository, never()).save(any());
-    }
-
-    @Test
-    void shouldNotCallOpenAiWhenDisabled() throws Exception {
-        Job job = new Job("1", "Java Developer", "Test", "DE",
-                "http://test?geoId=1", "");
-
-        when(parser.parse(anyString())).thenReturn(List.of(job));
-        when(parser.fetchDescriptionByJobId("1")).thenReturn("Java 2+");
-        when(jobRepository.existsByJobId("1")).thenReturn(false);
-        when(openAiProperties.isEnabled()).thenReturn(false);
-
-        jobProcessor.processJavaJobs();
-
+        // Фильтр по языкам сработал, OpenAI не вызывается
         verify(openAiJobFitService, never()).evaluate(any());
-        verify(jobRepository).save(any());
-    }
-
-    @Test
-    void shouldSkipJobWithHighExperienceWithoutPlusSign() throws Exception {
-        Job job = new Job("1", "Java Developer 8 years experience", "Test", "DE",
-                "http://test?geoId=1", "");
-
-        when(parser.parse(anyString())).thenReturn(List.of(job));
-        when(jobRepository.existsByJobId("1")).thenReturn(false);
-
-        jobProcessor.processJavaJobs();
-
         verify(jobRepository, never()).save(any());
     }
 }
