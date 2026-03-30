@@ -11,12 +11,8 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: none
+      ddl-auto: update
     show-sql: false
-
-  flyway:
-    enabled: true
-    baseline-on-migrate: true
 
 logging:
   level:
