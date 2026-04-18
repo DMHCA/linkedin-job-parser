@@ -4,76 +4,187 @@ import com.romantrippel.linkedinjobparser.entity.Job;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 @Component
 public class LinkedInJobParser {
 
-    public List<Job> parse(String url) throws Exception {
-        try {
-            List<Job> jobs = new ArrayList<>();
+    private static final Logger log =
+            LoggerFactory.getLogger(LinkedInJobParser.class);
 
-            Document doc = fetchDocument(url);
+    private static final Random RANDOM = new Random();
 
-            var jobElements = doc.select("ul.jobs-search__results-list li");
+    private static final int MAX_RETRIES = 3;
 
-            for (Element jobElement : jobElements) {
+    // ========================= SEARCH =========================
 
-                String title = extractText(jobElement, "h3");
-                String company = extractText(jobElement, "h4");
-                String location = extractText(jobElement, ".job-search-card__location");
+    public List<Job> parse(String url) {
 
-                String link = extractJobLink(jobElement);
-                String jobId = extractJobId(link);
+        for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
 
-                if (jobId.isBlank()) {
+            try {
+                List<Job> jobs = new ArrayList<>();
+
+                Document doc = fetchDocument(url);
+
+                var jobElements = doc.select("ul.jobs-search__results-list li");
+
+                for (Element jobElement : jobElements) {
+
+                    String title = extractText(jobElement, "h3");
+                    String company = extractText(jobElement, "h4");
+                    String location = extractText(jobElement, ".job-search-card__location");
+
+                    String link = extractJobLink(jobElement);
+                    String jobId = extractJobId(link);
+
+                    if (jobId.isBlank()) {
+                        continue;
+                    }
+
+                    jobs.add(new Job(jobId, title, company, location, link, ""));
+                }
+
+                return jobs;
+
+            } catch (org.jsoup.HttpStatusException e) {
+
+                if (e.getStatusCode() == 429) {
+
+                    long delay = randomDelaySeconds(40, 65);
+
+                    log.warn(
+                            "SEARCH RATE LIMITED (429) | attempt={} | url={} | retry_in={}s",
+                            attempt,
+                            url,
+                            delay / 1000
+                    );
+
+                    sleep(delay);
+
                     continue;
                 }
 
-                jobs.add(new Job(jobId, title, company, location, link, ""));
-            }
+                log.error(
+                        "SEARCH HTTP ERROR | attempt={} | url={} | status={}",
+                        attempt,
+                        url,
+                        e.getStatusCode(),
+                        e
+                );
 
-            return jobs;
+                break;
 
-        } catch (org.jsoup.HttpStatusException e) {
-            if (e.getStatusCode() == 429) {
-                throw new RuntimeException("LinkedIn rate limit hit (429) for url: " + url, e);
+            } catch (Exception e) {
+
+                log.error(
+                        "SEARCH FAILED | attempt={} | url={} | error={}",
+                        attempt,
+                        url,
+                        e.getMessage(),
+                        e
+                );
+
+                break;
             }
-            throw e;
         }
+
+        log.error("SEARCH FAILED FINAL | url={}", url);
+        return new ArrayList<>();
     }
+
+    // ========================= DESCRIPTION =========================
 
     public String fetchDescriptionByJobId(String jobId) {
-        try {
-            Document jobDoc = fetchJobDocument(jobId);
 
-            Element descriptionElement = jobDoc.selectFirst(".show-more-less-html__markup");
+        for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
 
-            if (descriptionElement == null) {
-                descriptionElement = jobDoc.selectFirst(".description__text");
-            }
+            try {
+                Document jobDoc = fetchJobDocument(jobId);
 
-            if (descriptionElement == null) {
-                descriptionElement = jobDoc.selectFirst(".core-section-container__content");
-            }
+                Element descriptionElement = jobDoc.selectFirst(".show-more-less-html__markup");
 
-            if (descriptionElement == null) {
+                if (descriptionElement == null) {
+                    descriptionElement = jobDoc.selectFirst(".description__text");
+                }
+
+                if (descriptionElement == null) {
+                    descriptionElement = jobDoc.selectFirst(".core-section-container__content");
+                }
+
+                if (descriptionElement == null) {
+                    log.warn("DESCRIPTION EMPTY | jobId={}", jobId);
+                    return "";
+                }
+
+                String text = descriptionElement.text()
+                        .replaceAll("\\s+", " ")
+                        .trim();
+
+                if (text.isBlank()) {
+                    log.warn("DESCRIPTION BLANK | jobId={}", jobId);
+                    return "";
+                }
+
+                log.info("DESCRIPTION OK | jobId={} | length={}", jobId, text.length());
+
+                return text;
+
+            } catch (org.jsoup.HttpStatusException e) {
+
+                if (e.getStatusCode() == 429) {
+
+                    long delay = randomDelaySeconds(40, 65);
+
+                    log.warn(
+                            "DESCRIPTION RATE LIMITED (429) | attempt={} | jobId={} | retry_in={}s",
+                            attempt,
+                            jobId,
+                            delay / 1000
+                    );
+
+                    sleep(delay);
+
+                    continue;
+                }
+
+                log.error(
+                        "DESCRIPTION HTTP ERROR | jobId={} | status={} | url={}",
+                        jobId,
+                        e.getStatusCode(),
+                        e.getUrl(),
+                        e
+                );
+
+                return "";
+
+            } catch (Exception e) {
+
+                log.error(
+                        "DESCRIPTION FETCH FAILED | jobId={} | error={}",
+                        jobId,
+                        e.getMessage(),
+                        e
+                );
+
                 return "";
             }
-
-            return descriptionElement.text()
-                    .replaceAll("\\s+", " ")
-                    .trim();
-
-        } catch (Exception e) {
-            return "";
         }
+
+        log.error("DESCRIPTION FAILED FINAL | jobId={}", jobId);
+        return "";
     }
 
+    // ========================= HTTP =========================
+
     protected Document fetchDocument(String url) throws Exception {
+
         return Jsoup.connect(url)
                 .userAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
                         "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
@@ -87,8 +198,21 @@ public class LinkedInJobParser {
     }
 
     private Document fetchJobDocument(String jobId) throws Exception {
-        String publicUrl = buildPublicJobUrl(jobId);
-        return fetchDocument(publicUrl);
+        return fetchDocument(buildPublicJobUrl(jobId));
+    }
+
+    // ========================= HELPERS =========================
+
+    private void sleep(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private long randomDelaySeconds(int min, int max) {
+        return (min + RANDOM.nextInt(max - min + 1)) * 1000L;
     }
 
     private String extractText(Element parent, String selector) {

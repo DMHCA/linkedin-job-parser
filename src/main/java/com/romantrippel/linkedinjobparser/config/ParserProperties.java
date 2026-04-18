@@ -3,20 +3,14 @@ package com.romantrippel.linkedinjobparser.config;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 @Component
 @ConfigurationProperties(prefix = "parser")
 public class ParserProperties {
 
-    /**
-     * uk:101165590,spain:105646813,...
-     */
-    private String geoIds;
-
-    private List<String> englishGeoIds;
+    private List<String> locations;
+    private List<String> englishLocations;
 
     private List<String> javaKeywords;
     private List<String> bigTechKeywords;
@@ -32,50 +26,28 @@ public class ParserProperties {
 
     private String interval;
 
-    // ===================== CUSTOM MAPPING =====================
-
-    public Map<String, Integer> getGeoIdMap() {
-        if (geoIds == null || geoIds.isBlank()) {
-            return Map.of();
-        }
-
-        Map<String, Integer> result = new LinkedHashMap<>();
-
-        String[] entries = geoIds.split(",");
-
-        for (String entry : entries) {
-            String[] parts = entry.split(":");
-
-            if (parts.length != 2) continue;
-
-            String country = parts[0].trim().toLowerCase();
-            String value = parts[1].trim();
-
-            try {
-                result.put(country, Integer.valueOf(value));
-            } catch (NumberFormatException ignored) {
-            }
-        }
-
-        return result;
-    }
+    // Delays
+    private long searchDelayMinMs;
+    private long searchDelayMaxMs;
+    private long jobDelayMinMs;
+    private long jobDelayMaxMs;
 
     // ===================== GETTERS / SETTERS =====================
 
-    public String getGeoIds() {
-        return geoIds;
+    public List<String> getLocations() {
+        return locations;
     }
 
-    public void setGeoIds(String geoIds) {
-        this.geoIds = geoIds;
+    public void setLocations(List<String> locations) {
+        this.locations = locations;
     }
 
-    public List<String> getEnglishGeoIds() {
-        return englishGeoIds;
+    public List<String> getEnglishLocations() {
+        return englishLocations;
     }
 
-    public void setEnglishGeoIds(List<String> englishGeoIds) {
-        this.englishGeoIds = englishGeoIds;
+    public void setEnglishLocations(List<String> englishLocations) {
+        this.englishLocations = englishLocations;
     }
 
     public List<String> getJavaKeywords() {
@@ -148,5 +120,39 @@ public class ParserProperties {
 
     public void setInterval(String interval) {
         this.interval = interval;
+    }
+
+    // ===================== DELAYS =====================
+
+    public long getSearchDelayMinMs() {
+        return searchDelayMinMs;
+    }
+
+    public void setSearchDelayMinMs(long searchDelayMinMs) {
+        this.searchDelayMinMs = searchDelayMinMs;
+    }
+
+    public long getSearchDelayMaxMs() {
+        return searchDelayMaxMs;
+    }
+
+    public void setSearchDelayMaxMs(long searchDelayMaxMs) {
+        this.searchDelayMaxMs = searchDelayMaxMs;
+    }
+
+    public long getJobDelayMinMs() {
+        return jobDelayMinMs;
+    }
+
+    public void setJobDelayMinMs(long jobDelayMinMs) {
+        this.jobDelayMinMs = jobDelayMinMs;
+    }
+
+    public long getJobDelayMaxMs() {
+        return jobDelayMaxMs;
+    }
+
+    public void setJobDelayMaxMs(long jobDelayMaxMs) {
+        this.jobDelayMaxMs = jobDelayMaxMs;
     }
 }

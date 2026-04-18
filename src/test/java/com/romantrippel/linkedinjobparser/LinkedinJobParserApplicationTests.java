@@ -2,21 +2,23 @@ package com.romantrippel.linkedinjobparser;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 
-@SpringBootTest(properties = "spring.profiles.active=test")
+@SpringBootTest
+@ActiveProfiles("test")
 @Testcontainers
 class LinkedinJobParserApplicationTests {
 
-	@Container
-	@ServiceConnection
-	static PostgreSQLContainer<?> postgres =
-			new PostgreSQLContainer<>("postgres:16");
+    @Container
+    @ServiceConnection
+    static PostgreSQLContainer<?> postgres =
+            new PostgreSQLContainer<>("postgres:16");
 
-	@Test
-	void contextLoads() {
-	}
+    @Test
+    void contextLoads() {
+    }
 }

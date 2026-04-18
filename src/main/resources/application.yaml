@@ -19,17 +19,26 @@ logging:
     org.flywaydb: debug
 
 parser:
-  geo-ids: ${LINKEDIN_GEO_IDS}
-  english-geo-ids: ${ENGLISH_GEO_IDS}
+  locations: ${LINKEDIN_LOCATIONS}
+  english-locations: ${ENGLISH_LOCATIONS}
+
   java-keywords: ${JAVA_KEYWORDS}
   big-tech-keywords: ${BIG_TECH_KEYWORDS}
+
   f-tpr: ${LINKEDIN_F_TPR}
   f-wt: ${LINKEDIN_F_WT}
+
   big-tech-companies: ${BIG_TECH_COMPANIES}
   excluded-languages: ${EXCLUDED_LANGUAGES}
   excluded-title-words: ${EXCLUDED_TITLE_WORDS}
+
   interval: ${PARSER_INTERVAL}
   max-years-experience: ${PARSER_MAX_YEARS_EXPERIENCE:4}
+
+  search-delay-min-ms: ${SEARCH_DELAY_MIN_MS:3000}
+  search-delay-max-ms: ${SEARCH_DELAY_MAX_MS:7000}
+  job-delay-min-ms: ${JOB_DELAY_MIN_MS:1000}
+  job-delay-max-ms: ${JOB_DELAY_MAX_MS:3000}
 
 openai:
   api-key: ${OPENAI_API_KEY}

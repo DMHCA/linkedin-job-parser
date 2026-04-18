@@ -1,4 +1,8 @@
 spring:
+  task:
+    scheduling:
+      enabled: false
+
   datasource:
     url: jdbc:tc:postgresql:16:///testdb
     username: test
