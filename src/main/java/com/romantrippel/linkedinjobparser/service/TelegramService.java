@@ -37,24 +37,54 @@ public class TelegramService {
         if (!telegramProperties.isEnabled()) return;
 
         try {
-            sendMessage(job);
+            String chatId = resolveChat(job);
+            sendMessage(job, chatId);
+
         } catch (Exception e) {
             log.error("Telegram send failed for jobId={}", job.getJobId(), e);
         }
     }
 
-    private void sendMessage(Job job) {
-        String url = "https://api.telegram.org/bot" + telegramProperties.getBotToken() + "/sendMessage";
+    private String resolveChat(Job job) {
+
+        if (isAmazon(job)) {
+            return telegramProperties.getChatAmazonId();
+        }
+
+        if (isGermany(job)) {
+            return telegramProperties.getChatGermanyId();
+        }
+
+        return telegramProperties.getChatId();
+    }
+
+    private boolean isGermany(Job job) {
+        return safe(job.getLocation()).toLowerCase().contains("germany");
+    }
+
+    private boolean isAmazon(Job job) {
+        String company = safe(job.getCompany()).toLowerCase();
+
+        return company.contains("amazon")
+                || company.contains("aws");
+    }
+
+    private void sendMessage(Job job, String chatId) {
+        String url = "https://api.telegram.org/bot"
+                + telegramProperties.getBotToken()
+                + "/sendMessage";
 
         Map<String, Object> requestBody = Map.of(
-                "chat_id", telegramProperties.getChatId(),
+                "chat_id", chatId,
                 "text", buildMessage(job),
                 "disable_web_page_preview", true
         );
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody, headers);
+
+        HttpEntity<Map<String, Object>> request =
+                new HttpEntity<>(requestBody, headers);
 
         restTemplate.postForObject(url, request, String.class);
     }

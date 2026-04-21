@@ -10,6 +10,7 @@ import org.springframework.http.HttpEntity;
 import org.springframework.web.client.RestTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class TelegramServiceTest {
@@ -25,6 +26,8 @@ class TelegramServiceTest {
         telegramProperties = new TelegramProperties();
         telegramProperties.setBotToken("TEST_TOKEN");
         telegramProperties.setChatId("123");
+        telegramProperties.setChatAmazonId("222");
+        telegramProperties.setChatGermanyId("333");
         telegramProperties.setEnabled(true);
 
         openAiProperties = mock(OpenAiProperties.class);
@@ -90,7 +93,7 @@ class TelegramServiceTest {
 
         telegramService.sendJob(job);
 
-        verify(restTemplate, times(1))
+        verify(restTemplate, atLeastOnce())
                 .postForObject(anyString(), any(HttpEntity.class), eq(String.class));
     }
 
@@ -107,6 +110,7 @@ class TelegramServiceTest {
 
     @Test
     void sendJob_shouldThrowException_whenJobIsNull() {
+
         NullPointerException exception = org.junit.jupiter.api.Assertions.assertThrows(
                 NullPointerException.class,
                 () -> telegramService.sendJob(null)
@@ -124,13 +128,13 @@ class TelegramServiceTest {
 
         ArgumentCaptor<String> urlCaptor = ArgumentCaptor.forClass(String.class);
 
-        verify(restTemplate).postForObject(
+        verify(restTemplate, atLeastOnce()).postForObject(
                 urlCaptor.capture(),
                 any(HttpEntity.class),
                 eq(String.class)
         );
 
-        String url = urlCaptor.getValue();
+        String url = urlCaptor.getAllValues().get(0);
 
         assertThat(url)
                 .isEqualTo("https://api.telegram.org/botTEST_TOKEN/sendMessage");

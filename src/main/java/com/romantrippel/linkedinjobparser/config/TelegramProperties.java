@@ -12,8 +12,30 @@ public class TelegramProperties {
     @Value("${telegram.chat-id}")
     private String chatId;
 
+    @Value("${telegram.chat-amazon-id}")
+    private String chatAmazonId;
+
+    @Value("${telegram.chat-germany-id}")
+    private String chatGermanyId;
+
     @Value("${telegram.enabled}")
     private boolean enabled;
+
+    public String getChatAmazonId() {
+        return chatAmazonId;
+    }
+
+    public void setChatAmazonId(String chatAmazonId) {
+        this.chatAmazonId = chatAmazonId;
+    }
+
+    public String getChatGermanyId() {
+        return chatGermanyId;
+    }
+
+    public void setChatGermanyId(String chatGermanyId) {
+        this.chatGermanyId = chatGermanyId;
+    }
 
     public String getBotToken() {
         return botToken;
